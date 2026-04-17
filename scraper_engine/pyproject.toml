@@ -1,0 +1,20 @@
+[project]
+name = "buyguardian-scraper"
+version = "0.1.0"
+description = "High-performance OLX.ba scraper engine for the BuyGuardian Trust Score extension"
+requires-python = ">=3.11"
+dependencies = [
+    "playwright>=1.40.0",
+    "playwright-stealth>=1.0.6",
+    "pydantic>=2.5.0",
+]
+
+[project.optional-dependencies]
+redis = [
+    "redis>=5.0.0",
+]
+dev = [
+    "ruff>=0.1.0",
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+]
