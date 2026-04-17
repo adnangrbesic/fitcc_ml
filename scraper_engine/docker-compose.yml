@@ -1,0 +1,77 @@
+# ---------------------------------------------------------------------------
+# BuyGuardian — Docker Compose: 10 Scraper Workers + Redis
+# ---------------------------------------------------------------------------
+# Pokreni sve:        docker compose up -d --scale scraper=10
+# Gledaj logove:      docker compose logs -f scraper
+# Zaustavi:           docker compose down
+# ---------------------------------------------------------------------------
+
+services:
+  # -----------------------------------------------------------------------
+  # Redis — shared task queue
+  # -----------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # -----------------------------------------------------------------------
+  # Scraper workers (scale to N replicas)
+  # -----------------------------------------------------------------------
+  scraper:
+    build: .
+    command: >
+      python -m scraper.worker
+        --redis redis://redis:6379
+        --queue olx:urls
+        --concurrency 5
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      # Default replicas (override with --scale scraper=10)
+      replicas: 1
+      resources:
+        limits:
+          memory: 2G
+          cpus: "1.5"
+        reservations:
+          memory: 512M
+          cpus: "0.5"
+    environment:
+      - WORKER_ID={{.Task.Slot}}
+    restart: on-failure
+
+  # -----------------------------------------------------------------------
+  # URL Loader — utility to push URLs into the Redis queue
+  # -----------------------------------------------------------------------
+  loader:
+    image: redis:7-alpine
+    depends_on:
+      redis:
+        condition: service_healthy
+    profiles:
+      - tools
+    # Usage: docker compose run --rm loader
+    # Then paste URLs or pipe a file:
+    #   cat urls.txt | docker compose run --rm loader
+    entrypoint: >
+      sh -c '
+        echo "Paste URLs (one per line), then Ctrl+D:";
+        while IFS= read -r url; do
+          redis-cli -h redis LPUSH olx:urls "$$url";
+          echo "Queued: $$url";
+        done;
+        echo "Total in queue:";
+        redis-cli -h redis LLEN olx:urls
+      '
+
+volumes:
+  redis_data:
