@@ -448,6 +448,24 @@ class ScraperEngine:
             
         return await self.scrape_batch(list(all_urls))
 
+    async def validate_listings(self, listings: list[ListingData]) -> list[ListingData]:
+        """
+        Re-visit a list of listings and update their is_active status.
+        Useful for checking if 'missing' items were sold or deleted.
+        """
+        if not listings:
+            return []
+            
+        logger.info("Validating status for %d potential zombie listings...", len(listings))
+        
+        urls = [f"https://olx.ba/artikal/{l.item_id}" for l in listings]
+        
+        # We can use scrape_batch which handles concurrency and returns updated ListingData
+        updated = await self.scrape_batch(urls)
+        
+        # Return only the ones that were successfully checked
+        return [u for u in updated if u is not None]
+
     # ------------------------------------------------------------------
     # Internal Helpers
     # ------------------------------------------------------------------

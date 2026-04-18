@@ -81,6 +81,10 @@ class Parser:
         # Clean HTML from description
         merged["description"] = self._strip_html(desc)
         
+        # Detect if active
+        page_content = await page.content()
+        merged["is_active"] = "Oglas je završen" not in page_content and "Artikal izbrisan" not in page_content
+        
         merged["description_caps_ratio"] = self._caps_ratio(merged["description"])
         merged["description_exclamation_count"] = merged["description"].count("!")
 

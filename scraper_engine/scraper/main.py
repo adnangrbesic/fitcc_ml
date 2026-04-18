@@ -26,9 +26,11 @@ import argparse
 import asyncio
 import json
 import logging
+from datetime import datetime
 
 from scraper.engine import ScraperEngine
-from scraper.models import ScraperConfig
+from scraper.models import ScraperConfig, ListingData
+from scraper.store import JSONStore
 
 # -------------------------------------------------------------------------
 # Logging Setup
@@ -106,7 +108,17 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument(
         "--output",
         default=None,
-        help="Output JSON file path. Default: stdout.",
+        help="Output JSON file path for current run. Default: sdtout.",
+    )
+    p.add_argument(
+        "--history",
+        default="scraper_history.json",
+        help="Persistent JSON file to track all seen listings (default: scraper_history.json).",
+    )
+    p.add_argument(
+        "--no-validate",
+        action="store_true",
+        help="Skip the validation check for missing (zombie) listings.",
     )
     return p
 
@@ -121,28 +133,53 @@ async def run(args: argparse.Namespace) -> None:
         max_concurrent_pages=args.concurrency,
     )
 
-    from scraper.models import ListingData
+    # Initialize persistent storage
+    store = JSONStore(args.history)
 
     async with ScraperEngine(config) as engine:
-        listings: list[ListingData | None] = []
+        current_listings: list[ListingData] = []
+        
         if args.query:
             # Construct search URL
             query_encoded = args.query.replace(" ", "%20")
             search_url = f"https://olx.ba/pretraga?q={query_encoded}"
             logger.info("Search mode for query: '%s' (url: %s)", args.query, search_url)
-            listings = await engine.scrape_category(search_url, max_pages=args.pages)
+            current_listings = await engine.scrape_category(search_url, max_pages=args.pages)
         elif args.category_url:
             logger.info("Category scrape mode for %s (pages=%d)", args.category_url, args.pages)
-            listings = await engine.scrape_category(args.category_url, max_pages=args.pages)
-        elif len(args.url) == 1:
+            current_listings = await engine.scrape_category(args.category_url, max_pages=args.pages)
+        elif args.url and len(args.url) == 1:
             # Single listing
             listing = await engine.scrape_listing(args.url[0])
-            listings = [listing]
-        else:
+            current_listings = [listing] if listing else []
+        elif args.url:
             # Batch scraping
             logger.info("Batch scraping %d URLs (concurrency=%d)",
                         len(args.url), config.max_concurrent_pages)
-            listings = await engine.scrape_batch(args.url)
+            current_listings = await engine.scrape_batch(args.url)
+
+        # Remove Nones
+        current_listings = [l for l in current_listings if l is not None]
+        
+        # 1. Update history with current findings
+        current_ids = []
+        for l in current_listings:
+            l.last_seen_at = datetime.utcnow()
+            store.upsert(l)
+            current_ids.append(l.item_id)
+        
+        # 2. Identify and validate zombies (missing items)
+        if not args.no_validate and (args.query or args.category_url):
+            stale = store.get_stale_active_listings(current_ids, query=args.query)
+            if stale:
+                logger.info("Found %d potential zombies to validate", len(stale))
+                validated = await engine.validate_listings(stale)
+                for v in validated:
+                    # Update the store with the latest status (is_active=False etc)
+                    store.upsert(v)
+        
+        # 3. Save combined state
+        store.save()
 
         # Filtering logic
         filtered_listings = []
@@ -152,10 +189,7 @@ async def run(args: argparse.Namespace) -> None:
             "slusalice", "kutija", "adapter", "oprema", "dijelovi", "dijelove"
         }
         
-        for l in listings:
-            if not l:
-                continue
-            
+        for l in current_listings:
             title_lower = l.title.lower()
             
             # 1. Price check
@@ -189,7 +223,7 @@ async def run(args: argparse.Namespace) -> None:
 
     # Summary
     success = len(results)
-    filtered = len(listings) - success
+    filtered = len(current_listings) - success
     logger.info("Done: %d listings scraped successfully. Filtered out %d accessories.", success, filtered)
 
 

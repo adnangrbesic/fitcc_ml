@@ -38,9 +38,14 @@ class ListingData(BaseModel):
     description: str = Field("", description="Full listing description text (sanitized)")
     phone_number: str = Field("", description="Phone if extracted from __INITIAL_STATE__")
     is_promoted: bool = Field(False, description="True if the listing has a promoted/TOP badge")
+    is_active: bool = Field(True, description="True if the listing is still available on OLX")
+    last_seen_at: datetime = Field(
+        default_factory=datetime.utcnow,
+        description="UTC timestamp of when the listing was last seen in search results"
+    )
     scraped_at: datetime = Field(
         default_factory=datetime.utcnow,
-        description="UTC timestamp of when the scrape occurred",
+        description="UTC timestamp of when the full listing details were last fetched",
     )
 
     description_caps_ratio: Optional[float] = Field(
