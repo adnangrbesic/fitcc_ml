@@ -120,6 +120,33 @@ def build_argparser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip the validation check for missing (zombie) listings.",
     )
+    p.add_argument(
+        "--llm-category",
+        default=None,
+        help=(
+            "Enable LLM enrichment using templates in scraper/llm_templates/<category>."
+        ),
+    )
+    p.add_argument(
+        "--llm-prompt-template",
+        default=None,
+        help="Override prompt template path (.txt or .py).",
+    )
+    p.add_argument(
+        "--llm-output-template",
+        default=None,
+        help="Override output-template JSON path.",
+    )
+    p.add_argument(
+        "--llm-output-schema",
+        default=None,
+        help="Override strict output-schema JSON path.",
+    )
+    p.add_argument(
+        "--llm-skip-schema-validation",
+        action="store_true",
+        help="Skip JSON-schema validation of LLM output.",
+    )
     return p
 
 
@@ -135,6 +162,31 @@ async def run(args: argparse.Namespace) -> None:
 
     # Initialize persistent storage
     store = JSONStore(args.history)
+
+    enricher = None
+    if args.llm_category:
+        from scraper.llm.config import LLMConfigurationError
+        from scraper.llm.enricher import build_enricher
+
+        try:
+            enricher = build_enricher(
+                category=args.llm_category,
+                prompt_template_path=args.llm_prompt_template,
+                output_template_path=args.llm_output_template,
+                output_schema_path=args.llm_output_schema,
+                validate_output_schema=(
+                    False if args.llm_skip_schema_validation else None
+                ),
+            )
+        except LLMConfigurationError as exc:
+            logger.error("LLM enrichment config error: %s", exc)
+            raise
+
+        if args.llm_skip_schema_validation:
+            logger.warning("LLM output schema validation is DISABLED for this run")
+
+        # Operational visibility: verify provider/model reachability before scraping.
+        await enricher.log_status()
 
     async with ScraperEngine(config) as engine:
         current_listings: list[ListingData] = []
@@ -178,9 +230,6 @@ async def run(args: argparse.Namespace) -> None:
                     # Update the store with the latest status (is_active=False etc)
                     store.upsert(v)
         
-        # 3. Save combined state
-        store.save()
-
         # Filtering logic
         filtered_listings = []
         excluded_keywords = {
@@ -208,6 +257,33 @@ async def run(args: argparse.Namespace) -> None:
                     continue
             
             filtered_listings.append(l)
+
+        # Optional LLM enrichment stage (after filtering)
+        if enricher is not None:
+            logger.info(
+                "LLM enrichment enabled for category '%s' (%d listings)",
+                args.llm_category,
+                len(filtered_listings),
+            )
+
+            filtered_listings = await enricher.enrich(filtered_listings)
+            success_count = sum(
+                1
+                for listing in filtered_listings
+                if listing.llm_meta and listing.llm_meta.get("status") == "ok"
+            )
+            logger.info(
+                "LLM enrichment finished: %d/%d successful",
+                success_count,
+                len(filtered_listings),
+            )
+
+            # Persist enriched payloads in history state.
+            for listing in filtered_listings:
+                store.upsert(listing)
+
+        # Save combined state after optional enrichment updates.
+        store.save()
 
         results = [l.model_dump(mode="json") for l in filtered_listings]
 

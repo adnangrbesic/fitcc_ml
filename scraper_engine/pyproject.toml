@@ -7,6 +7,8 @@ dependencies = [
     "playwright>=1.40.0",
     "playwright-stealth>=1.0.6",
     "pydantic>=2.5.0",
+    "openai>=1.40.0",
+    "jsonschema>=4.23.0",
 ]
 
 [project.optional-dependencies]

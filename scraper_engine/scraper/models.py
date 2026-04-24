@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -58,6 +58,17 @@ class ListingData(BaseModel):
     description_exclamation_count: Optional[int] = Field(
         None,
         description="Number of '!' in description — another scam signal.",
+    )
+
+    llm_enrichment: Optional[dict[str, Any]] = Field(
+        None,
+        description="Strictly validated LLM enrichment payload for this listing.",
+    )
+    llm_meta: Optional[dict[str, Any]] = Field(
+        None,
+        description=(
+            "LLM call metadata such as provider/model/status/attempts/latency/error."
+        ),
     )
 
     class Config:
