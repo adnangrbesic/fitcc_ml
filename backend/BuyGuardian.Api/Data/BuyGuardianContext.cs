@@ -14,6 +14,7 @@ public class BuyGuardianContext : DbContext
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<PriceHistory> PriceHistories => Set<PriceHistory>();
+    public DbSet<SearchQuery> SearchQueries => Set<SearchQuery>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -40,9 +41,10 @@ public class BuyGuardianContext : DbContext
 
         modelBuilder.Entity<Product>(entity =>
         {
-            entity.HasIndex(e => e.CanonicalName).IsUnique();
+            entity.HasIndex(e => e.CanonicalName);
             entity.Property(e => e.Attributes).HasColumnType("jsonb");
-            entity.Property(e => e.ProductVector).HasColumnType("vector(1536)"); // Default size for OpenAI embeddings
+            entity.Property(e => e.ProductVector).HasColumnType("vector(768)");
+            entity.HasIndex(e => e.CategoryName);
         });
 
         modelBuilder.Entity<Category>(entity =>
@@ -56,6 +58,11 @@ public class BuyGuardianContext : DbContext
             entity.HasOne(e => e.Listing)
                 .WithMany(l => l.PriceHistories)
                 .HasForeignKey(e => e.ListingId);
+        });
+
+        modelBuilder.Entity<SearchQuery>(entity =>
+        {
+            entity.HasIndex(e => e.QueryTerm).IsUnique();
         });
     }
 }

@@ -1,11 +1,17 @@
 using Microsoft.EntityFrameworkCore;
 using BuyGuardian.Api.Data;
 using BuyGuardian.Api.Interfaces;
+using BuyGuardian.Api.Services;
 using System.Text.Json.Serialization;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
+// Npgsql configuration is now handled via NpgsqlDataSourceBuilder
+// to avoid the obsolete GlobalTypeMapper.
+
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -18,14 +24,29 @@ builder.Services.AddSwaggerGen();
 
 // Database
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+dataSourceBuilder.EnableDynamicJson();
+dataSourceBuilder.UseVector();
+var dataSource = dataSourceBuilder.Build();
+
 builder.Services.AddDbContext<BuyGuardianContext>(options =>
-    options.UseNpgsql(connectionString, o => o.UseVector()));
+    options.UseNpgsql(dataSource, o => o.UseVector()));
+
 
 // MediatR
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
 
-// Redis (Mock implementation for now, interface ready)
-builder.Services.AddSingleton<ICacheService, MockCacheService>();
+// Redis
+var redisConfig = builder.Configuration.GetSection("Redis:Configuration").Value ?? "localhost:6379";
+builder.Services.AddSingleton<StackExchange.Redis.IConnectionMultiplexer>(StackExchange.Redis.ConnectionMultiplexer.Connect(redisConfig));
+builder.Services.AddScoped<ICacheService, RedisCacheService>();
+
+// Services
+builder.Services.AddHttpClient<IEmbeddingService, EmbeddingService>();
+builder.Services.AddScoped<IProductMatcher, ProductMatcher>();
+
+// RabbitMQ Hosted Service
+builder.Services.AddHostedService<ListingConsumer>();
 
 // CORS
 builder.Services.AddCors(options =>
@@ -40,7 +61,6 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -52,12 +72,19 @@ app.UseCors("AllowAll");
 app.UseAuthorization();
 app.MapControllers();
 
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<BuyGuardianContext>();
+    try 
+    {
+        db.Database.Migrate();
+    }
+    catch (Exception ex)
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred while migrating the database.");
+    }
+}
+
 app.Run();
 
-// Minimal Mock for Redis until real one is added
-public class MockCacheService : ICacheService
-{
-    public Task<T?> GetAsync<T>(string key) => Task.FromResult(default(T));
-    public Task SetAsync<T>(string key, T value, TimeSpan? expiration = null) => Task.CompletedTask;
-    public Task RemoveAsync(string key) => Task.CompletedTask;
-}

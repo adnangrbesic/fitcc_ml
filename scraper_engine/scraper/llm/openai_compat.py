@@ -22,6 +22,7 @@ class OpenAICompatibleClient:
         response = await self._client.chat.completions.create(
             model=self._config.model,
             temperature=self._config.temperature,
+            response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},

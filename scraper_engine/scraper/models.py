@@ -39,6 +39,13 @@ class ListingData(BaseModel):
     phone_number: str = Field("", description="Phone if extracted from __INITIAL_STATE__")
     is_promoted: bool = Field(False, description="True if the listing has a promoted/TOP badge")
     is_active: bool = Field(True, description="True if the listing is still available on OLX")
+    is_new: bool = Field(False, description="True if the product is marked as NOVO")
+    breadcrumbs: str = Field("", description="Category path (e.g. Nakit i Satovi > Ručni Satovi)")
+    raw_specs: dict[str, str] = Field(default_factory=dict, description="Raw technical specs table from DOM")
+    views: str = Field("", description="Number of views for the listing")
+    last_renewed: str = Field("", description="Last renewed date string from OLX")
+    condition_text: str = Field("", description="Human-readable condition (e.g. Korišteno, Novo)")
+
     last_seen_at: datetime = Field(
         default_factory=datetime.utcnow,
         description="UTC timestamp of when the listing was last seen in search results"

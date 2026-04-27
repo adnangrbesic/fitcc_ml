@@ -1,0 +1,50 @@
+# Scraper + normalization runtime settings
+# Keep this file local (never commit real tokens).
+
+# Enable/disable title normalization after scraping
+NORMALIZATION_ENABLED=true
+
+# Force regex-only extraction (skip HF model)
+NORMALIZATION_FORCE_REGEX=true
+
+# Skip catalog matching and keep extractor output as-is
+NORMALIZATION_SKIP_MATCHING=true
+
+# HuggingFace model settings
+HF_MODEL_NAME=dslim/bert-base-NER
+HF_MODEL_REVISION=
+HF_AGGREGATION=simple
+HF_DEVICE=-1
+HF_MIN_ENTITY_SCORE=0.20
+
+# HuggingFace token for private/gated models
+HF_TOKEN=
+
+# Optional JSON label map path (absolute or relative to scraper_engine)
+HF_LABEL_MAP_FILE=
+
+# Optional env file override (usually leave as default)
+SCRAPER_ENV_FILE=.env
+
+# ---------------------------------------------
+# LLM enrichment settings (provider via env only)
+# ---------------------------------------------
+# Supported: ollama, openai, openai_compat
+LLM_PROVIDER=ollama
+
+# Example: gemma4:e4b (Ollama), gpt-4o-mini (OpenAI), etc.
+LLM_MODEL=gemma4:e4b
+
+# For Ollama OpenAI-compatible API keep /v1 suffix.
+LLM_BASE_URL=http://localhost:11434/v1
+
+# Ollama can use a dummy key, OpenAI/cloud needs a real API key.
+LLM_API_KEY=ollama
+
+# LLM call behavior
+LLM_TIMEOUT_SEC=120
+LLM_MAX_RETRIES=2
+LLM_TEMPERATURE=0.0
+
+# Keep strict by default; set false to bypass output_schema validation.
+LLM_VALIDATE_OUTPUT_SCHEMA=false

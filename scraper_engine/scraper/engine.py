@@ -441,12 +441,9 @@ class ScraperEngine:
             if page_num < max_pages:
                 await human_delay(1.5, 4.0)
                 
-        # Now batch scrape all collected URLs
-        logger.info("Total unique URLs extracted: %d. Starting batch scrape...", len(all_urls))
-        if not all_urls:
-            return []
-            
-        return await self.scrape_batch(list(all_urls))
+        # Return all unique URLs extracted
+        logger.info("Total unique URLs extracted: %d.", len(all_urls))
+        return list(all_urls)
 
     async def validate_listings(self, listings: list[ListingData]) -> list[ListingData]:
         """

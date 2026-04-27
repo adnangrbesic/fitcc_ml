@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "object",
+      "properties": {
+        "short": { "type": "string" },
+        "long": { "type": "string" },
+        "score": { "type": "number" },
+        "canonical_name": { "type": "string" },
+        "canonical_confidence": { "type": "number" }
+      },
+      "required": ["short", "long", "score", "canonical_name", "canonical_confidence"]
+    },
+    "category": { "type": "string" },
+    "attributes": { "type": "object" },
+    "context": {
+      "type": "object",
+      "properties": {
+        "condition": { "type": "number", "minimum": 0, "maximum": 1 },
+        "overpay_ratio": { "type": "number", "minimum": -1, "maximum": 1 },
+        "warranty_months": { "type": "integer" },
+        "special_warranty": { "type": ["string", "null"] },
+        "writing_quality": { "type": "number", "minimum": 1, "maximum": 10 },
+        "overall_listing_trust": { "type": "number", "minimum": 0, "maximum": 10 }
+      },
+      "required": ["condition", "overpay_ratio", "writing_quality", "overall_listing_trust"]
+    },
+    "context_reasoning": {
+      "type": "object"
+    }
+  },
+  "required": ["title", "category", "attributes", "context", "context_reasoning"]
+}

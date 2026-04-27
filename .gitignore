@@ -1,9 +1,13 @@
-# Datasets and state
+# Datasets and state (Broad ignores)
 *.json
 *.html
 *.png
 *.webp
 *.log
+
+# Allow specific configuration JSONs
+!scraper_engine/scraper/llm_templates/**/*.json
+!backend/BuyGuardian.Api/*.json
 
 # Python
 __pycache__/
@@ -15,7 +19,8 @@ __pycache__/
 *.egg-info/
 
 # Environment
-.env
+!.env
+.env.local
 .venv
 env/
 venv/
@@ -24,3 +29,11 @@ venv.bak/
 
 # Scraper specific
 scraper_engine/olx_state.json
+scraper_engine/scraper_history.json
+
+# Ollama / AI Models
+.ollama/
+models/
+*.gguf
+ollama.log
+.cache/

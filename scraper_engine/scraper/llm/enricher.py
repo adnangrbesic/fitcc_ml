@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import httpx
 from time import perf_counter
 
 from scraper.llm.config import LLMRuntimeConfig, build_config
@@ -19,7 +21,11 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_SYSTEM_PROMPT = (
     "You are a strict JSON data extraction engine. "
-    "Follow the user instructions exactly and return only valid JSON."
+    "You MUST return ONLY a single valid JSON object. "
+    "Do NOT include any preamble, introduction, or explanations. "
+    "Ensure all property names and string values are enclosed in double quotes. "
+    "Do NOT use single quotes for JSON. "
+    "Follow the output schema exactly."
 )
 
 
@@ -72,11 +78,33 @@ class ListingEnricher:
         last_error = ""
         last_latency_ms = 0
 
+        # Try to fetch category-specific prompt from API
+        dynamic_prompt = ""
+        api_url = os.getenv("API_BASE_URL", "http://api:80")
+        category_name = listing.breadcrumbs.split(' > ')[-1] if listing.breadcrumbs else ""
+        
+        if category_name:
+            try:
+                async with httpx.AsyncClient(timeout=2.0) as client:
+                    response = await client.get(f"{api_url}/api/categories/{category_name}")
+                    if response.status_code == 200:
+                        cat_data = response.json()
+                        dynamic_prompt = cat_data.get("llmPromptTemplate", "")
+                        if dynamic_prompt:
+                            logger.info(f"Using dynamic prompt for category: {category_name}")
+            except Exception as e:
+                logger.debug(f"Could not fetch dynamic prompt for {category_name}: {e}")
+
         for attempt in range(1, max_attempts + 1):
             started = perf_counter()
             try:
+                # Append dynamic prompt to base template if present
+                full_template = self._prompt_template
+                if dynamic_prompt:
+                    full_template += f"\n\n// ADDITIONAL CATEGORY SPECIFIC INSTRUCTIONS\n{dynamic_prompt}"
+
                 user_prompt = render_user_prompt(
-                    prompt_template=self._prompt_template,
+                    prompt_template=full_template,
                     output_template=self._output_template,
                     listing_payload=listing_payload,
                 )

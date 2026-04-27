@@ -12,5 +12,6 @@ public class Category
 
     public string LlmPromptTemplate { get; set; } = string.Empty;
 
-    public Dictionary<string, string> ExtractSchema { get; set; } = new();
+    public string? ExtractSchema { get; set; }
+    public int ListingCount { get; set; }
 }

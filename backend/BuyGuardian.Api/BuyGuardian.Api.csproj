@@ -18,6 +18,9 @@
     <PackageReference Include="Pgvector" Version="0.2.0" />
     <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.2.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    <PackageReference Include="RabbitMQ.Client" Version="6.8.1" />
+    <PackageReference Include="StackExchange.Redis" Version="2.7.27" />
+    <PackageReference Include="OllamaSharp" Version="3.0.4" />
   </ItemGroup>
 
 </Project>

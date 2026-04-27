@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "object",
+      "properties": {
+        "short": { "type": "string" },
+        "long": { "type": "string" },
+        "score": { "type": "number" }
+      },
+      "required": ["short", "long", "score"]
+    },
+    "category": { "type": "string" },
+    "attributes": { "type": "object" },
+    "context": {
+      "type": "object",
+      "properties": {
+        "condition": { "type": "number" },
+        "overpay_ratio": { "type": "number" },
+        "warranty_duration": { "type": ["string", "null"] },
+        "special_warranty": { "type": ["string", "null"] },
+        "writing_quality": { "type": "number" },
+        "overall_listing_trust": { "type": "number" }
+      },
+      "required": ["condition", "overpay_ratio", "writing_quality", "overall_listing_trust"]
+    },
+    "context_reasoning": {
+      "type": "object"
+    }
+  },
+  "required": ["title", "category", "attributes", "context", "context_reasoning"]
+}

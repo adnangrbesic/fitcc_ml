@@ -1,0 +1,29 @@
+{
+  "title": {
+    "short": "Unknown",
+    "long": "Unknown",
+    "score": 0.0
+  },
+  "category": "Mobile Phones",
+  "attributes": {
+    "storage_gb": 0,
+    "ram_gb": 0,
+    "color": "Unknown"
+  },
+  "context": {
+    "condition": 0.0,
+    "overpay_ratio": 0.0,
+    "warranty_duration": null,
+    "special_warranty": null,
+    "writing_quality": 0.0,
+    "overall_listing_trust": 0.0
+  },
+  "context_reasoning": {
+    "condition": "",
+    "overpay_ratio": "",
+    "warranty_duration": "",
+    "special_warranty": "",
+    "writing_quality": "",
+    "overall_listing_trust": ""
+  }
+}

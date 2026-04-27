@@ -109,3 +109,7 @@ D:\Dokumente\fitcc_ml\backend\BuyGuardian.Api\obj\Debug\net8.0\refint\BuyGuardia
 D:\Dokumente\fitcc_ml\backend\BuyGuardian.Api\obj\Debug\net8.0\BuyGuardian.Api.pdb
 D:\Dokumente\fitcc_ml\backend\BuyGuardian.Api\obj\Debug\net8.0\BuyGuardian.Api.genruntimeconfig.cache
 D:\Dokumente\fitcc_ml\backend\BuyGuardian.Api\obj\Debug\net8.0\ref\BuyGuardian.Api.dll
+D:\Dokumente\fitcc_ml\backend\BuyGuardian.Api\bin\Debug\net8.0\OllamaSharp.dll
+D:\Dokumente\fitcc_ml\backend\BuyGuardian.Api\bin\Debug\net8.0\Pipelines.Sockets.Unofficial.dll
+D:\Dokumente\fitcc_ml\backend\BuyGuardian.Api\bin\Debug\net8.0\RabbitMQ.Client.dll
+D:\Dokumente\fitcc_ml\backend\BuyGuardian.Api\bin\Debug\net8.0\StackExchange.Redis.dll

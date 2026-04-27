@@ -3,7 +3,7 @@
 # Uses the official Microsoft Playwright image (includes Chromium + deps).
 # Avoids hours of debugging missing .so libraries on Linux.
 # ---------------------------------------------------------------------------
-FROM mcr.microsoft.com/playwright/python:v1.40.0-jammy
+FROM mcr.microsoft.com/playwright/python:v1.58.0-jammy
 
 WORKDIR /app
 

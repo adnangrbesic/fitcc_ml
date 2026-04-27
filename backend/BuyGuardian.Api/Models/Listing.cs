@@ -30,6 +30,7 @@ public class Listing
     public double? TrustScore { get; set; }
 
     public bool IsActive { get; set; } = true;
+    public bool IsNew { get; set; }
 
     public DateTime ScrapedAt { get; set; } = DateTime.UtcNow;
 

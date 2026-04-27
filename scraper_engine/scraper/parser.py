@@ -33,19 +33,24 @@ logger = logging.getLogger(__name__)
 # Update these when OLX.ba changes its markup.
 # -------------------------------------------------------------------------
 SELECTORS: dict[str, str] = {
-    "title": "h1.main-title-listing, h4[data-cy='ad_title'], .css-1juynto, h1.css-1soizd2",
+    "title": "h1.main-title-listing, [data-cy='ad_title'], .css-1juynto, h1.css-1soizd2",
     "price": "span.price-heading, [data-testid='ad-price-container'] h3, .css-12vqlj3 h3, .css-90xrc0",
     "currency": "span.price-heading, [data-testid='ad-price-container'] p, .css-12vqlj3 p",
     "description": "div.ad-description, div[data-cy='ad_description'] div, .css-1t507yq div",
-    "seller_name": ".user-info__username, h4[data-cy='seller_card_name'], .css-1lcz6o7 h4",
+    "seller_name": ".user-info__username, a.user-info__username, .css-1lcz6o7 h4, a[data-cy='seller_card_name'], .css-16h6te1 h4",
     "seller_link": "a.user-info__username, a[data-cy='seller_card_name'], a[href*='/profil/']",
     "seller_rating": "[data-testid='seller-rating'], .css-1dp4137",
     "account_age": ".medals-wrap, [data-cy='seller_card_since'], .css-16h6te1",
-    "location": ".btn-pill.city, p[data-testid='location-date'], .css-1cju8pu",
+    "location": ".btn-pill.city, p[data-testid='location-date'], .css-1cju8pu, .css-96530o",
     "promoted_badge": "[data-testid='ad-promoted-label'], .css-1kfqt1f, [data-cy='promoted']",
     "phone_reveal_btn": "button[data-cy='ad-contact-phone'], button[data-testid='show-phone']",
     "phone_number": "[data-testid='phone-number'], .css-1ij4lbz",
+    "breadcrumbs": "a.breadcrumbs, .breadcrumbs, nav ol, .css-1hsqxat, .css-1h1v187",
+    "specs": "div.grid.grid-cols-1.sm\\:grid-cols-2, .osobine-tabela, .css-13vgh6l, .ad-attributes",
+    "is_new_badge": "div:has-text('NOVO'), span:has-text('NOVO'), .css-19v0v4f, [data-cy='ad-condition-new']",
+    "badges": ".flex.flex-row.items-center.gap-2.flex-wrap div, .css-96530o div",
 }
+
 
 
 class Parser:
@@ -303,7 +308,84 @@ class Parser:
         data["location"] = await self._text(page, SELECTORS["location"])
         data["description"] = await self._text(page, SELECTORS["description"])
         data["seller_name"] = await self._text(page, SELECTORS["seller_name"])
-        data["account_age"] = await self._text(page, SELECTORS["account_age"])
+        data["account_age"] = await self._text(page, SELECTORS["account_age"])        # 1. Breadcrumbs extraction (multi-item)
+        bc_els = await page.locator(SELECTORS["breadcrumbs"]).all_text_contents()
+        if bc_els:
+            # Deduplicate while preserving order
+            seen = set()
+            clean_bc = []
+            for x in bc_els:
+                val = x.strip()
+                if val and val not in seen:
+                    clean_bc.append(val)
+                    seen.add(val)
+            data["breadcrumbs"] = " > ".join(clean_bc)
+
+        # 2. Extract specs (Osobine) using high-fidelity script
+        data["raw_specs"] = await page.evaluate(
+            """() => {
+                const specs = {};
+                // Find all divs that contain exactly two h4 elements (Nuxt 3 pattern)
+                const pairs = Array.from(document.querySelectorAll('div')).filter(div => {
+                    const h4s = div.querySelectorAll(':scope > h4');
+                    return h4s.length === 2;
+                });
+                
+                pairs.forEach(div => {
+                    const h4s = div.querySelectorAll(':scope > h4');
+                    const k = h4s[0].innerText.trim().replace(/:$/, '');
+                    let v = h4s[1].innerText.trim();
+                    
+                    // If text is empty, check for an icon (e.g. checkmark SVG)
+                    if (!v && h4s[1].querySelector('svg, i, .icon, [class*="icon"], [data-icon]')) {
+                        v = "Da";
+                    }
+                    
+                    if (k && v && k.length < 50) specs[k] = v;
+                });
+
+                // Fallback for traditional tables or lists if no h4 pairs found
+                if (Object.keys(specs).length === 0) {
+                    const rows = document.querySelectorAll('tr, .osobine-tabela li, .ad-attributes li');
+                    rows.forEach(r => {
+                        const text = r.innerText.trim();
+                        if (text.includes(':')) {
+                            const parts = text.split(':');
+                            if (parts.length >= 2) {
+                                specs[parts[0].trim()] = parts.slice(1).join(':').trim();
+                            }
+                        } else {
+                            const cells = r.querySelectorAll('td, span, div');
+                            if (cells.length >= 2) {
+                                const k = cells[0].innerText.trim().replace(/:$/, '');
+                                let v = cells[1].innerText.trim();
+                                if (!v && cells[1].querySelector('svg, i, .icon')) v = "Da";
+                                if (k && v && k.length < 50) specs[k] = v;
+                            }
+                        }
+                    });
+                }
+
+                
+                return specs;
+            }"""
+        )
+
+
+
+        # 3. Badges / Metadata pills
+        badges = await page.locator(SELECTORS["badges"]).all_text_contents()
+        for b in badges:
+            text = b.strip()
+            if not text: continue
+            if "ID:" in text: data["item_id"] = text.replace("ID:", "").strip()
+            if "Pregledi:" in text: data["views"] = text.replace("Pregledi:", "").strip()
+            if "Obnovljen:" in text: data["last_renewed"] = text.replace("Obnovljen:", "").strip()
+            if text in ["Korišteno", "Novo"]: data["condition_text"] = text
+
+
+        # Detect "NOVO" badge
+        data["is_new"] = await page.locator(SELECTORS["is_new_badge"]).count() > 0
 
         # Seller ID from profile link href
         data["seller_id"] = await self._extract_seller_id(page)

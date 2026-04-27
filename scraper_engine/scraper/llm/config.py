@@ -162,11 +162,11 @@ def build_config(
             "LLM_PROVIDER must be one of: ollama, openai, openai_compat"
         )
 
-    model = os.getenv("LLM_MODEL", "gemma4:e4b").strip()
+    model = os.getenv("LLM_MODEL", "llama3").strip()
     if not model:
         raise LLMConfigurationError("LLM_MODEL cannot be empty")
 
-    timeout_s = _read_float("LLM_TIMEOUT_SEC", 45.0, min_value=1.0)
+    timeout_s = _read_float("LLM_TIMEOUT_SEC", 300.0, min_value=1.0)
     max_retries = _read_int("LLM_MAX_RETRIES", 2, min_value=0)
     temperature = _read_float("LLM_TEMPERATURE", 0.0, min_value=0.0, max_value=1.0)
     env_validate_output_schema = _read_bool("LLM_VALIDATE_OUTPUT_SCHEMA", True)

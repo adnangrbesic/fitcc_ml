@@ -28,6 +28,8 @@ from typing import Optional
 
 from scraper.engine import ScraperEngine
 from scraper.models import ScraperConfig
+from scraper.publisher import RabbitMqPublisher
+from scraper.llm.enricher import build_enricher
 
 logging.basicConfig(
     level=logging.INFO,
@@ -96,6 +98,12 @@ async def run_redis_mode(
         return
 
     client = aioredis.from_url(redis_url, decode_responses=True)
+    publisher = RabbitMqPublisher()
+    publisher.connect()
+    
+    # Initialize LLM Enricher
+    enricher = build_enricher(category="general")
+    
     logger.info("[%s] Redis mode — queue=%s, concurrency=%d",
                 WORKER_ID, queue_name, config.max_concurrent_pages)
 
@@ -119,20 +127,45 @@ async def run_redis_mode(
             if not url:
                 continue
 
-            logger.info("[%s] Scraping: %s", WORKER_ID, url)
-            listing = await engine.scrape_listing(url)
+            logger.info("[%s] Processing: %s", WORKER_ID, url)
+            
+            # Detect if it's a search query or a direct listing URL
+            is_search = False
+            target_url = url
+            
+            if not url.startswith("http"):
+                # Treat as search term
+                from urllib.parse import quote
+                target_url = f"https://olx.ba/pretraga?q={quote(url)}"
+                is_search = True
+                logger.info("[%s] 🔍 Search term detected, constructed URL: %s", WORKER_ID, target_url)
+            elif "/pretraga" in url:
+                is_search = True
+                logger.info("[%s] 🔍 Search URL detected: %s", WORKER_ID, target_url)
 
-            if listing:
-                # Push result back to Redis as JSON (or write to DB here)
-                await client.lpush(
-                    f"{queue_name}:results",
-                    listing.model_dump_json(),
-                )
-                logger.info("[%s] ✓ %s — %s", WORKER_ID, listing.item_id, listing.title)
+            if is_search:
+                # Get URLs from search page
+                urls_to_process = await engine.scrape_category(target_url, max_pages=1)
+                logger.info("[%s] Found %d URLs to process from search", WORKER_ID, len(urls_to_process))
             else:
-                # Push failed URL to dead-letter queue
-                await client.lpush(f"{queue_name}:failed", url)
-                logger.warning("[%s] ✗ Failed: %s", WORKER_ID, url)
+                # Direct listing
+                urls_to_process = [target_url]
+
+            for current_url in urls_to_process:
+                # Direct listing scrape
+                listing = await engine.scrape_listing(current_url)
+                
+                if listing:
+                    # Push full listing data to Redis for Batch Enrichment
+                    await client.lpush(
+                        "olx:raw_listings",
+                        listing.model_dump_json(),
+                    )
+                    logger.info("[%s] ✓ %s — Raw pushed to Redis", WORKER_ID, listing.item_id)
+                else:
+                    if not is_search: # Only log failure for direct URLs
+                        await client.lpush(f"{queue_name}:failed", url)
+                        logger.warning("[%s] ✗ Failed: %s", WORKER_ID, url)
 
     await client.aclose()
 
