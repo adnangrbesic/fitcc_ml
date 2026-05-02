@@ -28,6 +28,10 @@ services:
     image: ollama/ollama
     ports:
       - "11434:11434"
+    environment:
+      - OLLAMA_KV_CACHE_TYPE=
+      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_NUM_PARALLEL=1
     deploy:
       resources:
         reservations:
@@ -42,9 +46,12 @@ services:
   ollama-setup:
     image: alpine:latest
     command: >
-        sh -c "apk add --no-cache curl && sleep 20 && 
-               curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"llama3\"}' &&
-               curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"nomic-embed-text\"}'"
+      sh -c "apk add --no-cache curl && sleep 20 && 
+           curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"gemma4:e4b\"}' &&
+           curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"nomic-embed-text\"}' &&
+           curl http://ollama:11434/api/generate -d '{\"model\": \"gemma4:e4b\"}' &&
+           curl http://ollama:11434/api/embeddings -d '{\"model\": \"nomic-embed-text\", \"prompt\": \"warmup\"}'"
+               
     depends_on:
       - ollama
     restart: on-failure
@@ -78,7 +85,7 @@ services:
       - RABBITMQ_HOST=rabbitmq
       - LLM_PROVIDER=ollama
       - LLM_BASE_URL=http://ollama:11434/v1
-      - LLM_MODEL=llama3
+      - LLM_MODEL=gemma4:e4b
       - LLM_VALIDATE_OUTPUT_SCHEMA=True
       - LLM_TIMEOUT_SEC=300
     depends_on:
@@ -99,7 +106,7 @@ services:
       - RABBITMQ_HOST=rabbitmq
       - LLM_PROVIDER=ollama
       - LLM_BASE_URL=http://ollama:11434/v1
-      - LLM_MODEL=llama3
+      - LLM_MODEL=gemma4:e4b
       - LLM_TIMEOUT_SEC=300
     depends_on:
       - redis
