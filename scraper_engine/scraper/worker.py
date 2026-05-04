@@ -156,12 +156,15 @@ async def run_redis_mode(
                 listing = await engine.scrape_listing(current_url)
                 
                 if listing:
-                    # Push full listing data to Redis for Batch Enrichment
+                    # 1. Publish RAW data to RabbitMQ immediately for fast UI feedback
+                    publisher.publish_listing(listing.model_dump())
+                    
+                    # 2. Push to Redis for Batch Enrichment (LLM)
                     await client.lpush(
                         "olx:raw_listings",
                         listing.model_dump_json(),
                     )
-                    logger.info("[%s] ✓ %s — Raw pushed to Redis", WORKER_ID, listing.item_id)
+                    logger.info("[%s] ✓ %s — Raw published to MQ and Redis", WORKER_ID, listing.item_id)
                 else:
                     if not is_search: # Only log failure for direct URLs
                         await client.lpush(f"{queue_name}:failed", url)

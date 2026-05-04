@@ -1,0 +1,328 @@
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.popup-wrapper {
+  width: 360px;
+  min-height: 200px;
+  max-height: 560px;
+  overflow-y: auto;
+  background: var(--mat-app-background-color, #0f0f14);
+  color: var(--mat-app-on-background, #e8eaf6);
+  font-family: 'Google Sans', Roboto, sans-serif;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+}
+
+/* ─── Toolbar ─── */
+.toolbar {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%) !important;
+  color: #90caf9 !important;
+  padding: 0 12px !important;
+  min-height: 48px !important;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+
+  .logo {
+    width: 24px;
+    height: 24px;
+    margin-right: 8px;
+    border-radius: 4px;
+  }
+
+  .toolbar-title {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .spacer { flex: 1; }
+
+  .detected-icon {
+    color: #69f0ae;
+    font-size: 18px;
+  }
+}
+
+/* ─── Content ─── */
+.content {
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+/* ─── Skeleton Loading ─── */
+.skeleton-container {
+  display: grid;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.skeleton-card {
+  height: 100px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #1a1a2e 25%, #252545 50%, #1a1a2e 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #1a1a2e 25%, #252545 50%, #1a1a2e 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+
+  &.short { width: 40%; }
+  &.medium { width: 70%; }
+  &.long { width: 100%; }
+}
+
+.skeleton-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.skeleton-block {
+  height: 40px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #1a1a2e 25%, #252545 50%, #1a1a2e 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.processing-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(25, 25, 45, 0.6);
+  border-radius: 12px;
+  border: 1px solid rgba(144, 202, 249, 0.2);
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.processing-text {
+  font-size: 13px;
+  color: #90caf9;
+  line-height: 1.4;
+}
+
+.spin-icon {
+  animation: spin 2s infinite linear;
+  color: #64b5f6;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.refresh-btn {
+  border-radius: 20px !important;
+  font-weight: 600 !important;
+  letter-spacing: 1px !important;
+}
+
+/* ─── Error ─── */
+.error-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(244, 67, 54, 0.1);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+  border-radius: 8px;
+  color: #ef9a9a;
+  font-size: 13px;
+
+  mat-icon { color: #f44336; }
+}
+
+/* ─── Results ─── */
+.results {
+  display: grid;
+  gap: 10px;
+}
+
+/* ─── Trust Card ─── */
+.trust-card {
+  border-radius: 12px !important;
+
+  &.trust-high { background: linear-gradient(135deg, #1b5e20, #2e7d32); color: white; }
+  &.trust-medium { background: linear-gradient(135deg, #f57f17, #fbc02d); color: #1a1a1a; }
+  &.trust-low { background: linear-gradient(135deg, #b71c1c, #d32f2f); color: white; }
+  &.trust-pending { background: rgba(255, 255, 255, 0.05); color: #ccc; border: 1px dashed #444; }
+}
+
+.trust-spinner {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.trust-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 16px;
+}
+
+.trust-score {
+  text-align: center;
+
+  .score-number {
+    font-size: 42px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .score-max {
+    font-size: 16px;
+    opacity: 0.8;
+  }
+}
+
+.trust-info {
+  .trust-label {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .product-name {
+    font-size: 12px;
+    opacity: 0.85;
+    margin-top: 4px;
+  }
+  .category-chip {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 2px 8px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 10px;
+    font-size: 11px;
+  }
+}
+
+/* ─── Section titles ─── */
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #90caf9;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+
+  mat-icon { font-size: 16px; height: 16px; width: 16px; }
+
+  &.warn-title {
+    color: #ffb74d;
+    mat-icon { color: #ff9800; }
+  }
+}
+
+/* ─── Price ─── */
+.price-section, .seller-section, .risks-section {
+  padding: 4px 0;
+}
+
+.price-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.price-item {
+  display: grid;
+  gap: 2px;
+
+  .price-label {
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .price-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: #e8eaf6;
+  }
+}
+
+.price-diff {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+
+  &.positive {
+    color: #69f0ae;
+    background: rgba(105,240,174,0.1);
+  }
+  &.negative {
+    color: #ef9a9a;
+    background: rgba(244,67,54,0.1);
+  }
+
+  mat-icon { font-size: 14px; height: 14px; width: 14px; }
+}
+
+/* ─── Seller ─── */
+.seller-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.seller-item {
+  display: grid;
+  gap: 4px;
+
+  .seller-label {
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+}
+
+.seller-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  mat-progress-bar { flex: 1; border-radius: 4px; }
+  .seller-pct { font-size: 12px; font-weight: 600; min-width: 32px; }
+}
+
+.warranty-icon {
+  font-size: 14px;
+  height: 14px;
+  width: 14px;
+  color: #69f0ae;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+/* ─── Risks ─── */
+.risk-chip {
+  font-size: 11px !important;
+}
+
+/* ─── Scrollbar ─── */
+.popup-wrapper::-webkit-scrollbar { width: 4px; }
+.popup-wrapper::-webkit-scrollbar-track { background: transparent; }
+.popup-wrapper::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }

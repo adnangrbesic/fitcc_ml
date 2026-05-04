@@ -1,39 +1,186 @@
-# Datasets and state (Broad ignores)
-*.json
-*.html
-*.png
-*.webp
-*.log
-
-# Allow specific configuration JSONs
-!scraper_engine/scraper/llm_templates/**/*.json
-!backend/BuyGuardian.Api/*.json
-
-# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-.pytest_cache/
-.ruff_cache/
-*.egg-info/
+*.py[cod]
+*$py.class
 
-# Environment
-!.env
-.env.local
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+#  Usually these files are written by a python script, before a executable
+#  is created. For example, py2exe writes a 'build' folder.
+#  Otherwise, the built executables are often found in a 'dist' folder.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+#   For a library or package, you might want to ignore these files since the Python version
+#   is customized by the client or user.
+# .python-version
+
+# pipenv
+#   According to pypa/pipenv#1181, it is recommended to include Pipfile.lock in version control.
+#   However, in cases where the author of a library or package doesn't want to lock a specific Python version,
+#   they can choose to ignore 'Pipfile.lock'.
+# Pipfile.lock
+
+# poetry
+#   Similar to Pipenv, see https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
+# poetry.lock
+
+# pdm
+#   Similar to Pipenv, see https://pdm.fming.dev/#use-pdm-in-a-project
+.pdm.toml
+.pdm-python
+.pdm-build/
+
+# PEP 582; used by e.g. github.com/frenzymadness/venvs
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
 .venv
 env/
 venv/
+ENV/
+env.bak/
 venv.bak/
-.DS_Store
 
-# Scraper specific
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+.history/
+
+# --- Angular / Node ---
+node_modules/
+dist/
+.angular/
+npm-debug.log
+yarn-error.log
+package-lock.json
+/out-tsc
+/bazel-out
+
+# --- .NET ---
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+
+# --- Databases ---
+postgres_data/
+ollama_storage/
+
+# --- BuyGuardian Specific ---
 scraper_engine/olx_state.json
 scraper_engine/scraper_history.json
-
-# Ollama / AI Models
-.ollama/
-models/
-*.gguf
-ollama.log
-.cache/
+!buyguardian-ui/src/app/app.html
+!buyguardian-ui/src/manifest.json
+!backend/BuyGuardian.Api/*.json
+!scraper_engine/scraper/llm_templates/**/*.json

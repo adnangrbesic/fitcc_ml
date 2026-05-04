@@ -8,11 +8,13 @@ namespace BuyGuardian.Api.Controllers;
 public class ScrapeController : ControllerBase
 {
     private readonly IDatabase _redis;
+    private readonly ILogger<ScrapeController> _logger;
     private const string QueueName = "olx:urls";
 
-    public ScrapeController(IConnectionMultiplexer redisMuxer)
+    public ScrapeController(IConnectionMultiplexer redisMuxer, ILogger<ScrapeController> logger)
     {
         _redis = redisMuxer.GetDatabase();
+        _logger = logger;
     }
 
     [HttpPost("queue")]
@@ -20,6 +22,7 @@ public class ScrapeController : ControllerBase
     {
         if (string.IsNullOrEmpty(url)) return BadRequest("URL is required");
 
+        _logger.LogInformation("Adding URL to scrape queue: {Url}", url);
         await _redis.ListLeftPushAsync(QueueName, url);
         return Ok(new { Message = "URL added to queue", Queue = QueueName, Url = url });
     }

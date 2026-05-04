@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "BuyGuardian",
+  "version": "1.0.0",
+  "description": "Pametan asistent za sigurnu kupovinu na OLX.ba",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_popup": "index.html",
+    "default_title": "BuyGuardian",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.olx.ba/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "*://*.olx.ba/*",
+    "http://localhost:5000/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["*.js", "*.css", "*.html", "icons/*"],
+      "matches": ["*://*.olx.ba/*"]
+    }
+  ]
+}

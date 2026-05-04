@@ -44,7 +44,7 @@ class RabbitMqPublisher:
                     body=json.dumps(listing_data),
                     properties=pika.BasicProperties(delivery_mode=2)  # make message persistent
                 )
-                logger.info(f"Published listing to RabbitMQ: {listing_data.get('itemId')}")
+                logger.info(f"Published listing to RabbitMQ: {listing_data.get('item_id')}")
             except Exception as e:
                 logger.error(f"Failed to publish to RabbitMQ: {e}")
                 self._channel = None # Reset for next attempt

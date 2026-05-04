@@ -3,12 +3,19 @@ using BuyGuardian.Api.Models;
 
 namespace BuyGuardian.Api.Features;
 
-public record AnalyzeListingQuery(Guid ListingId) : IRequest<ListingAnalysisResult>;
+public record AnalyzeListingQuery(string ItemId) : IRequest<ListingAnalysisResult>;
 
 public record ListingAnalysisResult(
-    Guid ListingId,
+    string ItemId,
     string Title,
-    double? TrustScore,
+    double TrustScore,
     string AnalysisSummary,
-    bool IsSuspicious
+    bool IsSuspicious,
+    decimal MarketPrice,
+    decimal? ListingPrice,
+    string[] Risks,
+    double SellerTrust,
+    string? Category,
+    string? ProductName,
+    int? WarrantyMonths
 );

@@ -48,14 +48,24 @@ builder.Services.AddScoped<IProductMatcher, ProductMatcher>();
 // RabbitMQ Hosted Service
 builder.Services.AddHostedService<ListingConsumer>();
 
-// CORS
+// CORS - Explicitly allow Chrome/Edge extensions and local dev origins
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("ExtensionCors", policy =>
     {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
+        policy
+            // Chrome/Edge/Opera extension origins (chrome-extension://*, moz-extension://*, etc.)
+            .SetIsOriginAllowed(origin =>
+                origin.StartsWith("chrome-extension://") ||
+                origin.StartsWith("moz-extension://") ||
+                origin.StartsWith("http://localhost") ||
+                origin.StartsWith("https://localhost") ||
+                origin.StartsWith("http://127.0.0.1") ||
+                string.IsNullOrEmpty(origin) // some extension requests come with no Origin
+            )
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials();
     });
 });
 
@@ -67,8 +77,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
-app.UseCors("AllowAll");
+// CORS mora biti PRIJE HttpsRedirection jer redirect ne prenosi CORS headere
+app.UseCors("ExtensionCors");
 app.UseAuthorization();
 app.MapControllers();
 

@@ -19,7 +19,7 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
 
     public async Task<ListingAnalysisResult> Handle(AnalyzeListingQuery request, CancellationToken cancellationToken)
     {
-        var cacheKey = $"analysis:{request.ListingId}";
+        var cacheKey = $"analysis:{request.ItemId}";
         var cached = await _cache.GetAsync<ListingAnalysisResult>(cacheKey);
         if (cached != null) return cached;
 
@@ -27,21 +27,19 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
             .Include(l => l.Seller)
             .Include(l => l.Product)
             .Include(l => l.PriceHistories)
-            .FirstOrDefaultAsync(l => l.Id == request.ListingId, cancellationToken);
+            .FirstOrDefaultAsync(l => l.ItemId == request.ItemId, cancellationToken);
 
         if (listing == null)
-            throw new KeyNotFoundException($"Listing {request.ListingId} not found");
+            throw new KeyNotFoundException($"Listing {request.ItemId} not found");
 
-        // Compute TrustScore
+        // Compute TrustScore (existing logic)
         double trustScore = 0.5; // Base score
         
-        // 1. Seller Trust (0.3 weight)
         if (listing.Seller != null)
         {
             trustScore += listing.Seller.TrustScore * 0.3;
         }
 
-        // 2. Price Stability (0.4 weight)
         if (listing.PriceHistories.Count > 1)
         {
             var prices = listing.PriceHistories.Select(p => (double)p.Price).ToList();
@@ -56,36 +54,52 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
         }
         else
         {
-            trustScore += 0.2; // Neutral for single data point
+            trustScore += 0.2;
         }
 
-        // 3. Condition/Metadata (0.3 weight)
-        if (listing.RawMetadata.TryGetValue("condition_score", out var scoreObj) && scoreObj is JsonElement scoreElem && scoreElem.TryGetDouble(out var score))
+        if (listing.RawMetadata.TryGetValue("context", out var contextObj) && contextObj is JsonElement contextElem)
         {
-            trustScore += score * 0.3;
+            if (contextElem.TryGetProperty("condition", out var conditionElem) && conditionElem.TryGetDouble(out var condition))
+            {
+                trustScore += condition * 0.3;
+            }
         }
         else
         {
-            trustScore += 0.15; // Neutral
+            trustScore += 0.15;
         }
 
-        // Final normalization and update DB
         listing.TrustScore = Math.Clamp(trustScore, 0.0, 1.0);
         await _context.SaveChangesAsync(cancellationToken);
 
         var isSuspicious = listing.TrustScore < 0.4;
-        var summary = $"Trust Analysis: {listing.TrustScore:P0}. " +
-                      $"Seller: {listing.Seller?.Username ?? "N/A"}. " +
-                      $"Price History: {listing.PriceHistories.Count} records. " +
-                      $"Condition Score: {scoreObj ?? "N/A"}. " +
-                      $"Status: {(isSuspicious ? "⚠️ Suspicious" : "✅ Verified")}";
+        
+        // Extract richer data
+        var risks = new List<string>();
+        if (isSuspicious) risks.Add("low_trust");
+        if (listing.PriceHistories.Count < 2) risks.Add("new_listing");
+        if (listing.Seller?.AccountAgeMonths < 3) risks.Add("new_account");
+
+        int? warranty = null;
+        if (listing.RawMetadata.TryGetValue("context", out var ctx) && ctx is JsonElement ctxElem)
+        {
+            if (ctxElem.TryGetProperty("warranty_months", out var wElem) && wElem.TryGetInt32(out var w))
+                warranty = w;
+        }
 
         var result = new ListingAnalysisResult(
-            listing.Id,
+            listing.ItemId,
             listing.Title,
-            listing.TrustScore,
-            summary,
-            isSuspicious
+            listing.TrustScore.Value * 10, // UI expects 0-10
+            $"Analiza za {listing.Title}. Trust: {listing.TrustScore:P0}.",
+            isSuspicious,
+            listing.Product?.AvgPrice ?? listing.Price,
+            listing.Price,
+            risks.ToArray(),
+            listing.Seller?.TrustScore ?? 0.5,
+            listing.Product?.CategoryName,
+            listing.Product?.CanonicalName,
+            warranty
         );
 
         await _cache.SetAsync(cacheKey, result, TimeSpan.FromHours(1));

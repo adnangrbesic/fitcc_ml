@@ -15,12 +15,12 @@ public class AnalyzeController : ControllerBase
         _mediator = mediator;
     }
 
-    [HttpGet("{listingId}")]
-    public async Task<ActionResult<ListingAnalysisResult>> AnalyzeListing(Guid listingId)
+    [HttpPost("{itemId}")]
+    public async Task<ActionResult<ListingAnalysisResult>> AnalyzeListing(string itemId)
     {
         try
         {
-            var result = await _mediator.Send(new AnalyzeListingQuery(listingId));
+            var result = await _mediator.Send(new AnalyzeListingQuery(itemId));
             return Ok(result);
         }
         catch (KeyNotFoundException ex)

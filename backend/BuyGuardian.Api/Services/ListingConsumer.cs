@@ -88,18 +88,25 @@ public class ListingConsumer : BackgroundService
             {
                 var body = ea.Body.ToArray();
                 var json = Encoding.UTF8.GetString(body);
+                _logger.LogDebug("Raw message received: {Json}", json);
+                
                 var message = JsonSerializer.Deserialize<ListingScrapeMessage>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                 
                 if (message != null)
                 {
-                    _logger.LogInformation("Received message from RabbitMQ: {ItemId}", message.ItemId);
+                    _logger.LogInformation("Received message from RabbitMQ: ItemId={ItemId}, Title={Title}, HasLlm={HasLlm}", 
+                        message.ItemId, message.Title, message.Llm_Metadata != null);
                     messageBuffer.Enqueue((ea.DeliveryTag, message));
+                }
+                else
+                {
+                    _logger.LogWarning("Deserialized message is null. Raw JSON: {Json}", json);
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to deserialize message. Moving to DLQ.");
-                MoveToDlq(ea.Body.ToArray(), "Deserialization error");
+                MoveToDlq(ea.Body.ToArray(), "Deserialization error: " + ex.Message);
                 _channel.BasicAck(ea.DeliveryTag, false);
             }
         };
@@ -151,19 +158,17 @@ public class ListingConsumer : BackgroundService
         {
             try
             {
-                _logger.LogInformation("Processing listing: {ItemId} - {Title}", msg.ItemId, msg.Title);
+                _logger.LogInformation("Processing listing in DB: {ItemId}", msg.ItemId);
                 await ProcessSingleListingAsync(db, productMatcher, msg, stoppingToken: default);
 
-                
                 int saved = await db.SaveChangesAsync();
                 _logger.LogInformation("Listing {ItemId} saved to DB. Rows affected: {Count}", msg.ItemId, saved);
 
                 _channel?.BasicAck(tag, false);
-                _logger.LogInformation("Successfully processed and Acked listing: {ItemId}", msg.ItemId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error processing listing {ItemId}. Retrying/DLQ...", msg.ItemId);
+                _logger.LogError(ex, "Error processing listing {ItemId}: {Message}", msg.ItemId, ex.Message);
                 MoveToDlq(JsonSerializer.SerializeToUtf8Bytes(msg), ex.Message);
                 _channel?.BasicAck(tag, false); 
             }

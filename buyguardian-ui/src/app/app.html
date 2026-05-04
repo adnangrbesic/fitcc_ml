@@ -1,0 +1,158 @@
+<div class="popup-wrapper">
+
+  <!-- TOOLBAR -->
+  <mat-toolbar class="toolbar">
+    <img src="icons/icon-48.png" alt="BuyGuardian" class="logo"/>
+    <span class="toolbar-title">BuyGuardian</span>
+    <span class="spacer"></span>
+    @if (detectedFromTab()) {
+      <mat-icon class="detected-icon" matTooltip="Detektovan OLX oglas">verified</mat-icon>
+    }
+  </mat-toolbar>
+
+  <!-- PROGRESS BAR -->
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate" color="accent"></mat-progress-bar>
+  }
+
+  <div class="content">
+
+    <!-- SKELETON LOADING -->
+    @if (loading() || isProcessing()) {
+      <div class="skeleton-container">
+        @if (isProcessing()) {
+          <div class="processing-info">
+            <mat-icon class="spin-icon">sync</mat-icon>
+            <span class="processing-text">{{ error()?.message }}</span>
+            <button mat-flat-button color="primary" (click)="analyze()" class="refresh-btn">
+              OSVJEŽI
+            </button>
+          </div>
+        }
+        <div class="skeleton-card"></div>
+        <div class="skeleton-line short"></div>
+        <div class="skeleton-line long"></div>
+        <div class="skeleton-line medium"></div>
+      </div>
+    }
+
+    <!-- ERROR STATE -->
+    @if (error() && !loading() && !isProcessing()) {
+      <div class="error-card">
+        <mat-icon>{{ error()!.offline ? 'wifi_off' : 'error_outline' }}</mat-icon>
+        <p>{{ error()!.message }}</p>
+      </div>
+    }
+
+    <!-- RESULTS -->
+    @if (result(); as res) {
+      <div class="results">
+
+        <!-- TRUST SCORE -->
+        <mat-card class="trust-card" [class]="getTrustColor(res.trustScore)">
+          <mat-card-content>
+            <div class="trust-grid">
+              <div class="trust-score">
+                @if (res.trustScore !== null && res.trustScore !== undefined) {
+                  <span class="score-number">{{ res.trustScore | number:'1.1-1' }}</span>
+                  <span class="score-max">/10</span>
+                } @else {
+                  <mat-progress-spinner mode="indeterminate" diameter="32" color="accent" class="trust-spinner"></mat-progress-spinner>
+                }
+              </div>
+              <div class="trust-info">
+                <div class="trust-label">
+                  @if (res.trustScore !== null && res.trustScore !== undefined) {
+                    {{ getTrustLabel(res.trustScore) }}
+                  } @else {
+                    Analiza detalja...
+                  }
+                </div>
+                @if (res.productName) {
+                  <div class="product-name">{{ res.productName }}</div>
+                }
+                @if (res.category) {
+                  <div class="category-chip">{{ res.category }}</div>
+                }
+              </div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <mat-divider></mat-divider>
+
+        <!-- PRICE COMPARISON -->
+        @if (res.marketPrice) {
+          <section class="price-section">
+            <h3 class="section-title">
+              <mat-icon>trending_up</mat-icon> Cijena
+            </h3>
+            <div class="price-grid">
+              <div class="price-item">
+                <span class="price-label">Tržišna cijena</span>
+                <span class="price-value">{{ res.marketPrice | number:'1.0-0' }} KM</span>
+              </div>
+              @if (res.listingPrice) {
+                <div class="price-item">
+                  <span class="price-label">Cijena oglasa</span>
+                  <span class="price-value">{{ res.listingPrice | number:'1.0-0' }} KM</span>
+                </div>
+                @if (getPriceDiff(res.marketPrice, res.listingPrice); as diff) {
+                  <div class="price-diff" [class.positive]="diff < 0" [class.negative]="diff > 0">
+                    <mat-icon>{{ diff < 0 ? 'arrow_downward' : 'arrow_upward' }}</mat-icon>
+                    {{ diff > 0 ? '+' : '' }}{{ diff }}% od prosjeka
+                  </div>
+                }
+              }
+            </div>
+          </section>
+          <mat-divider></mat-divider>
+        }
+
+        <!-- SELLER -->
+        <section class="seller-section">
+          <h3 class="section-title">
+            <mat-icon>person</mat-icon> Prodavač
+          </h3>
+          <div class="seller-grid">
+            <div class="seller-item">
+              <span class="seller-label">Seller Trust</span>
+              <div class="seller-bar-wrap">
+                <mat-progress-bar mode="determinate"
+                  [value]="res.sellerTrust * 100"
+                  [color]="res.sellerTrust >= 0.8 ? 'primary' : res.sellerTrust >= 0.5 ? 'accent' : 'warn'">
+                </mat-progress-bar>
+                <span class="seller-pct">{{ res.sellerTrust * 100 | number:'1.0-0' }}%</span>
+              </div>
+            </div>
+            @if (res.warrantyMonths && res.warrantyMonths > 0) {
+              <div class="seller-item">
+                <mat-icon class="warranty-icon">verified_user</mat-icon>
+                <span>Garancija {{ res.warrantyMonths }} mj.</span>
+              </div>
+            }
+          </div>
+        </section>
+
+        <!-- RISKS -->
+        @if (res.risks?.length) {
+          <mat-divider></mat-divider>
+          <section class="risks-section">
+            <h3 class="section-title warn-title">
+              <mat-icon>warning_amber</mat-icon> Rizici
+            </h3>
+            <mat-chip-set>
+              @for (risk of res.risks; track risk) {
+                <mat-chip highlighted color="warn" class="risk-chip">
+                  {{ getRiskLabel(risk) }}
+                </mat-chip>
+              }
+            </mat-chip-set>
+          </section>
+        }
+
+      </div>
+    }
+
+  </div>
+</div>
