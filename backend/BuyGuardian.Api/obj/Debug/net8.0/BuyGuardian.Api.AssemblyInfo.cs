@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("BuyGuardian.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+19b835ae06cd00a15ea8b33e5d7706235e02188c")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+006945d5a6adab675c0bf2698585a3363ee28337")]
 [assembly: System.Reflection.AssemblyProductAttribute("BuyGuardian.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("BuyGuardian.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

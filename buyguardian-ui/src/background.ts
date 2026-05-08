@@ -34,7 +34,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 
 function triggerEnrichment(url: string) {
   console.log('Triggering enrichment for:', url);
-  fetch('http://localhost:5000/api/scrape/queue', {
+  fetch('http://192.168.1.8:5000/api/scrape/queue', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(url)

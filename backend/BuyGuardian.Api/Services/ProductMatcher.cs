@@ -41,8 +41,7 @@ public class ProductMatcher : IProductMatcher
 
         if (pgMatch != null)
         {
-            _logger.LogInformation("pgvector match found: {Match} (Distance: {Dist})", 
-                pgMatch.CanonicalName, pgMatch.ProductVector!.CosineDistance(embedding));
+            _logger.LogInformation("pgvector match found: {Match}", pgMatch.CanonicalName);
             return pgMatch.Id;
         }
 

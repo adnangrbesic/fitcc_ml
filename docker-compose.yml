@@ -47,9 +47,9 @@ services:
     image: alpine:latest
     command: >
       sh -c "apk add --no-cache curl && sleep 20 && 
-           curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"gemma4:e4b\"}' &&
+           curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"llama3.1\"}' &&
            curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"nomic-embed-text\"}' &&
-           curl http://ollama:11434/api/generate -d '{\"model\": \"gemma4:e4b\"}' &&
+           curl http://ollama:11434/api/generate -d '{\"model\": \"llama3.1\"}' &&
            curl http://ollama:11434/api/embeddings -d '{\"model\": \"nomic-embed-text\", \"prompt\": \"warmup\"}'"
                
     depends_on:
@@ -85,7 +85,7 @@ services:
       - RABBITMQ_HOST=rabbitmq
       - LLM_PROVIDER=ollama
       - LLM_BASE_URL=http://ollama:11434/v1
-      - LLM_MODEL=gemma4:e4b
+      - LLM_MODEL=llama3.1
       - LLM_VALIDATE_OUTPUT_SCHEMA=True
       - LLM_TIMEOUT_SEC=300
     depends_on:
@@ -96,6 +96,8 @@ services:
       - ./scraper_engine:/app
     command: ["python", "-m", "scraper.worker", "--redis", "redis://redis:6379", "--queue", "olx:urls"]
     restart: always
+    deploy:
+      replicas: 2
 
   enricher:
     build:
@@ -106,7 +108,7 @@ services:
       - RABBITMQ_HOST=rabbitmq
       - LLM_PROVIDER=ollama
       - LLM_BASE_URL=http://ollama:11434/v1
-      - LLM_MODEL=gemma4:e4b
+      - LLM_MODEL=llama3.1
       - LLM_TIMEOUT_SEC=300
     depends_on:
       - redis
@@ -117,7 +119,7 @@ services:
     command: ["python", "-m", "scraper.enrich_queue"]
     restart: always
     deploy:
-      replicas: 2
+      replicas: 1
 
 volumes:
   postgres_data:

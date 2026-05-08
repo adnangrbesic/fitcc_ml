@@ -376,22 +376,30 @@ class ScraperEngine:
 
     async def scrape_category(
         self, category_url: str, max_pages: int = 1
-    ) -> list[Optional[ListingData]]:
+    ) -> list[str]:
         """Extract URLs from a category/search page and scrape them.
 
         Args:
             category_url: Base search URL (e.g. https://olx.ba/pretraga?kategorija=18)
-            max_pages: Number of pagination pages to crawl.
+            max_pages: Number of pagination pages to crawl. 0 means infinite.
             
         Returns:
-            List of ``ListingData`` across all crawled pages.
+            List of listing URLs across all crawled pages.
         """
         all_urls: set[str] = set()
+        page_num = 1
         
-        for page_num in range(1, max_pages + 1):
-            # Try to handle URL structure: append page=X
-            separator = "&" if "?" in category_url else "?"
-            url = f"{category_url}{separator}page={page_num}"
+        while True:
+            if max_pages > 0 and page_num > max_pages:
+                break
+            # If the URL already specifies a page, use it directly and stop after one iteration
+            if "page=" in category_url:
+                url = category_url
+                if page_num > 1:
+                    break
+            else:
+                separator = "&" if "?" in category_url else "?"
+                url = f"{category_url}{separator}page={page_num}"
             
             logger.info("Fetching category page %d: %s", page_num, url)
             
@@ -427,10 +435,15 @@ class ScraperEngine:
                 )
                 
                 logger.info("Found %d listing URLs on page %d", len(page_urls), page_num)
+                if not page_urls:
+                    logger.info("No more listings found on page %d. Stopping pagination.", page_num)
+                    break
+                    
                 all_urls.update(page_urls)
                 
             except Exception as exc:  # noqa: BLE001
                 logger.error("Failed to extract URLs from %s: %s", url, exc)
+                break # Stop on error to prevent infinite loops on broken pages
             finally:
                 if page:
                     await page.close()
@@ -438,8 +451,8 @@ class ScraperEngine:
                     await context.close()
                     
             # Human delay between pagination
-            if page_num < max_pages:
-                await human_delay(1.5, 4.0)
+            await human_delay(1.5, 4.0)
+            page_num += 1
                 
         # Return all unique URLs extracted
         logger.info("Total unique URLs extracted: %d.", len(all_urls))

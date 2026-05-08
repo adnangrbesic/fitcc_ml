@@ -22,15 +22,11 @@ RAW_QUEUE = "olx:raw_listings"
 BATCH_WINDOW = 1
 LLM_BATCH_TIMEOUT = 10.0  # seconds to wait before processing a partial batch
 
-async def process_batch(batch: List[Dict[str, Any]], enricher, publisher: RabbitMqPublisher):
+async def process_batch(batch: List[Dict[str, Any]], enricher, publisher: RabbitMqPublisher, redis_client):
     if not batch:
         return
 
     logger.info(f"Processing batch of {len(batch)} listings")
-    
-    # In a real batch LLM scenario, we'd send all at once. 
-    # For now, following the existing ListingEnricher which does them one by one but we wrap it.
-    # The prompt asked for "window=50 listings" and "1.2s/listing".
     
     tasks = []
     for raw_data in batch:
@@ -46,6 +42,13 @@ async def process_batch(batch: List[Dict[str, Any]], enricher, publisher: Rabbit
     for listing in enriched_listings:
         if not listing: continue
         
+        # Check if LLM enrichment succeeded
+        if not listing.llm_enrichment or (listing.llm_meta and listing.llm_meta.get("status") == "failed"):
+            logger.warning(f"Enrichment failed for {listing.item_id}. Re-queueing back to Redis queue...")
+            await redis_client.lpush("olx:raw_listings", listing.model_dump_json())
+            await asyncio.sleep(2)  # Avoid hammering Ollama if starting or overloaded
+            continue
+            
         # Convert Pydantic model to dict and ensure ISO date formatting
         payload = listing.model_dump()
         
@@ -56,7 +59,6 @@ async def process_batch(batch: List[Dict[str, Any]], enricher, publisher: Rabbit
             payload["scraped_at"] = payload["scraped_at"].isoformat()
 
         # For backward compatibility and C# matching if needed
-        # but our C# model now uses [JsonPropertyName("item_id")] etc.
         payload["is_new"] = listing.is_new
         
         publisher.publish_listing(payload)
@@ -92,7 +94,7 @@ async def main():
                 # Filter batch to only include dicts
                 valid_batch = [item for item in batch if isinstance(item, dict)]
                 if valid_batch:
-                    await process_batch(valid_batch, enricher, publisher)
+                    await process_batch(valid_batch, enricher, publisher, redis)
                 batch = []
                 last_batch_time = time.time()
                 

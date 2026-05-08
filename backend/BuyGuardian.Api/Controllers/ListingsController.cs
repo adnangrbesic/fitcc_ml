@@ -40,4 +40,23 @@ public class ListingsController : ControllerBase
 
         return listing;
     }
+
+    [HttpGet("{itemId}/needs-enrichment")]
+    public async Task<ActionResult<object>> NeedsEnrichment(string itemId)
+    {
+        var listing = await _context.Listings.FirstOrDefaultAsync(l => l.ItemId == itemId);
+        
+        if (listing == null)
+        {
+            return Ok(new { NeedsEnrichment = true, Reason = "Listing does not exist in DB." });
+        }
+
+        var ageHours = (DateTime.UtcNow - listing.ScrapedAt).TotalHours;
+        if (ageHours > 24)
+        {
+            return Ok(new { NeedsEnrichment = true, Reason = $"Listing is older than 24h ({ageHours:F1}h)." });
+        }
+
+        return Ok(new { NeedsEnrichment = false, Reason = $"Listing was scraped recently ({ageHours:F1}h ago)." });
+    }
 }

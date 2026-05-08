@@ -34,7 +34,8 @@ const RISK_LABELS: Record<string, string> = {
 @Injectable({ providedIn: 'root' })
 export class BuyGuardianService {
   private http = inject(HttpClient);
-  private baseUrl = 'http://localhost:5000';
+  // IP adresa VM servera iz grafa
+  private baseUrl = 'http://192.168.1.8:5000';
 
   analyze(itemId: string): Observable<AnalysisResult> {
     return this.http

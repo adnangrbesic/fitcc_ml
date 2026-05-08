@@ -3,7 +3,15 @@ import json
 import logging
 import os
 
+import datetime
+
 logger = logging.getLogger("scraper.publisher")
+
+class DateTimeEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, (datetime.date, datetime.datetime)):
+            return obj.isoformat()
+        return super().default(obj)
 
 class RabbitMqPublisher:
     def __init__(self, host=None, queue='listing_scrape'):
@@ -41,7 +49,7 @@ class RabbitMqPublisher:
                 self._channel.basic_publish(
                     exchange='',
                     routing_key=self.queue,
-                    body=json.dumps(listing_data),
+                    body=json.dumps(listing_data, cls=DateTimeEncoder),
                     properties=pika.BasicProperties(delivery_mode=2)  # make message persistent
                 )
                 logger.info(f"Published listing to RabbitMQ: {listing_data.get('item_id')}")

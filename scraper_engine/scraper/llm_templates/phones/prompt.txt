@@ -22,5 +22,9 @@ You're a data extraction engine for mobile phones. Your goal is to extract struc
 
 6. **is_global_version**: Boolean. True if it's a global/EU version, False if it's US/CN only or network locked.
 
+7. **is_for_parts**: Boolean. True if the phone is sold for parts, "za dijelove", "neispravan", iCloud locked, broken/non-functional, etc. False otherwise.
+
+8. **battery_health_percent**: Integer. Extract the battery health percentage if mentioned in the text (e.g. "battery health 88%", "bh 90", "zdravlje baterije 85%"). Use 0 if not mentioned or if brand new. If battery is <85%, penalize condition_score. If <80%, penalize condition_score heavily as it requires service.
+
 // ARTICLE LISTING
 {{ARTICLE_LISTING}}

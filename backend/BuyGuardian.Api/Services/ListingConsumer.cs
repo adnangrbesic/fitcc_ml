@@ -176,8 +176,13 @@ public class ListingConsumer : BackgroundService
     }
 
     private async Task ProcessSingleListingAsync(BuyGuardianContext db, IProductMatcher productMatcher, ListingScrapeMessage msg, CancellationToken stoppingToken)
-
     {
+        if (msg.Llm_Metadata == null)
+        {
+            _logger.LogWarning("Skipping listing {ItemId} because it has no LLM enrichment metadata.", msg.ItemId);
+            return;
+        }
+
         // a) Seller
         var seller = await db.Sellers.FirstOrDefaultAsync(s => s.OlxId == msg.Seller_OlxId, stoppingToken);
         if (seller == null)
