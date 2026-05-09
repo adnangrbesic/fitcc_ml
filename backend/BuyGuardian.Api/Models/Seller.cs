@@ -26,5 +26,5 @@ public class Seller
     
     public double TrustScore { get; set; }
 
-    public ICollection<Listing> Listings { get; set; } = new List<Listing>();
+    public ICollection<Listing>? Listings { get; set; } = new List<Listing>();
 }

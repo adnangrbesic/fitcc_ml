@@ -1,0 +1,60 @@
+[
+  {
+    "item_id": "72518903",
+    "title": "Opel Corsa 2023 1.2 Edition",
+    "price": 25900.0,
+    "currency": "KM",
+    "seller_id": "3949772",
+    "seller_name": "SAAAuto",
+    "is_email_verified": true,
+    "is_phone_verified": true,
+    "is_address_verified": false,
+    "positive_feedback": 0,
+    "neutral_feedback": 0,
+    "negative_feedback": 0,
+    "successful_deliveries": 0,
+    "account_age": "Medalja za više od 1 godine na OLX.ba",
+    "account_age_months": 12,
+    "location": "Sarajevo - Novo Sarajevo",
+    "description": "Opel Corsa 1.2 Edition 2023 Paket NCAP (prepoznavanje prometnih znakova - napredniji sustav, upozorenje na umor vozača, kočenje radi izbjegavanja i ublažavanja sudara pri malim brzinama, detekcija pješaka – osnovna)Staklo prednjih i stražnjih bočnih prozora i stražnjeg vjetrobrana s apsorpcijom sunčevog svjetlaElektrično podesivi vanjski retrovizori, ručno preklapanje, grijaniHalogena prednja svjetla s dnevnim svjetlima sa srebrnim detaljimaPrednji prozori s električnim podizačima, s vozačeve strane s brzim podizanjem/spuštanjemSportski upravljač s 3 krakaDaljinske kontrole sustava za informiranje i zabavu12-voltna utičnicaPutno računaloZračni jastuci - prednji, bočni, krovniPomoć pri kretanju na uzbrdiciTempomat - uključujući funkciju ograničenja brzineRučni klima-uređajSustav za detekciju niskog tlaka u gumama (DDS+)Komplet za popravak guma CIJENA: 25.900 KM! Cijena bez PDV-a: 22.136,75 KM Cijena sa PDV-om : 25.900,00 KM Mogucnost finansiranja putem leasinga ! Garancija kilometre i porijeklo vozila. Akciske CIjene nisu važeće u slučaju zamjene ! Posjetite nas na lokaciji: Marka Marulica 2A Sarajevo 71000 - Novo Sarajevo Sve dodatne Informacije zvati 061444458",
+    "phone_number": "",
+    "is_promoted": false,
+    "is_active": true,
+    "last_seen_at": "2026-04-24T13:20:27.171593",
+    "scraped_at": "2026-04-24T13:20:27.138677",
+    "description_caps_ratio": 0.06118143459915612,
+    "description_exclamation_count": 3,
+    "llm_enrichment": {
+      "title": {
+        "short": "Opel Corsa 1.2 Edition",
+        "long": "Opel Corsa 2023 1.2 Edition",
+        "score": 0.9
+      },
+      "context": {
+        "condition": 0.95,
+        "overpay_ratio": 0.1,
+        "warranty_duration": null,
+        "special_warranty": "Garancija kilometre i porijeklo vozila",
+        "writing_quality": 9.0,
+        "overall_listing_trust": 8.5
+      },
+      "context_reasoning": {
+        "condition": "The vehicle is a 2023 model year and the description is highly detailed, suggesting excellent physical condition.",
+        "overpay_ratio": "The listing is for a used car, and while the price is high, the mention of a warranty on mileage and origin adds value, justifying a slightly positive ratio.",
+        "warranty_duration": "The listing mentions a warranty on mileage and origin, but does not specify a time duration (e.g., 1 year, 3 months), so the value is null.",
+        "special_warranty": "The description explicitly states 'Garancija kilometre i porijeklo vozila' (Warranty on mileage and vehicle origin).",
+        "writing_quality": "The listing is highly detailed, listing numerous features (NCAP, solar glass, tempomat, etc.) and providing transparent pricing information, indicating high writing quality.",
+        "overall_listing_trust": "The combination of a recent model year, detailed feature list, professional presentation, and explicit warranty guarantees leads to a high overall trust score."
+      }
+    },
+    "llm_meta": {
+      "provider": "ollama",
+      "model": "gemma4:e4b",
+      "category": "phones",
+      "status": "ok",
+      "attempts": 1,
+      "latency_ms": 58957,
+      "error": null
+    }
+  }
+]

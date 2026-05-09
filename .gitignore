@@ -184,3 +184,6 @@ scraper_engine/scraper_history.json
 !buyguardian-ui/src/manifest.json
 !backend/BuyGuardian.Api/*.json
 !scraper_engine/scraper/llm_templates/**/*.json
+backend/BuyGuardian.Api/.vs
+backend/BuyGuardian.Api/bin
+backend/BuyGuardian.Api/obj
