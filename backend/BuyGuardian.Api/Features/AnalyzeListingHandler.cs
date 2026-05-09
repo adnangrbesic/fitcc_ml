@@ -34,44 +34,52 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
         if (listing == null)
             throw new KeyNotFoundException($"Listing {request.ItemId} not found");
 
-        // Compute TrustScore (existing logic)
-        double trustScore = 0.5; // Base score
-        
-        if (listing.Seller != null)
+        // Compute TrustScore (existing logic) or override with ML prediction
+        var trustScoreResult = await _mlService.GetTrustScoreAsync(listing, retrain: true);
+        if (trustScoreResult != null)
         {
-            trustScore += listing.Seller.TrustScore * 0.3;
-        }
-
-        if (listing.PriceHistories.Count > 1)
-        {
-            var prices = listing.PriceHistories.Select(p => (double)p.Price).ToList();
-            var stdDev = CalculateStandardDeviation(prices);
-            var avg = prices.Average();
-            
-            if (avg > 0)
-            {
-                var volatility = stdDev / avg;
-                trustScore += (1.0 - Math.Min(volatility, 1.0)) * 0.4;
-            }
+            listing.TrustScore = Math.Clamp(trustScoreResult.TrustScore / 10.0, 0.0, 1.0);
         }
         else
         {
-            trustScore += 0.2;
-        }
+            double trustScore = 0.5; // Base score
 
-        if (listing.RawMetadata.TryGetValue("context", out var contextObj) && contextObj is JsonElement contextElem)
-        {
-            if (contextElem.TryGetProperty("condition", out var conditionElem) && conditionElem.TryGetDouble(out var condition))
+            if (listing.Seller != null)
             {
-                trustScore += condition * 0.3;
+                trustScore += listing.Seller.TrustScore * 0.3;
             }
-        }
-        else
-        {
-            trustScore += 0.15;
-        }
 
-        listing.TrustScore = Math.Clamp(trustScore, 0.0, 1.0);
+            if (listing.PriceHistories.Count > 1)
+            {
+                var prices = listing.PriceHistories.Select(p => (double)p.Price).ToList();
+                var stdDev = CalculateStandardDeviation(prices);
+                var avg = prices.Average();
+
+                if (avg > 0)
+                {
+                    var volatility = stdDev / avg;
+                    trustScore += (1.0 - Math.Min(volatility, 1.0)) * 0.4;
+                }
+            }
+            else
+            {
+                trustScore += 0.2;
+            }
+
+            if (listing.RawMetadata.TryGetValue("context", out var contextObj) && contextObj is JsonElement contextElem)
+            {
+                if (contextElem.TryGetProperty("condition", out var conditionElem) && conditionElem.TryGetDouble(out var condition))
+                {
+                    trustScore += condition * 0.3;
+                }
+            }
+            else
+            {
+                trustScore += 0.15;
+            }
+
+            listing.TrustScore = Math.Clamp(trustScore, 0.0, 1.0);
+        }
 
         // ── Isolation Forest Anomaly Detection ───────────────────────────
         var anomalyResult = await _mlService.GetAnomalyScoreAsync(request.ItemId);

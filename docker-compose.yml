@@ -68,6 +68,7 @@ services:
       - RabbitMQ__HostName=rabbitmq
       - Ollama__BaseUrl=http://ollama:11434
       - Ollama__EmbeddingModel=nomic-embed-text
+      - TrustScoreService__BaseUrl=http://ml-service-listing:8010
       - ASPNETCORE_ENVIRONMENT=Development
     depends_on:
       - db
@@ -139,6 +140,23 @@ services:
     depends_on:
       - db
       - redis
+    restart: always
+
+  ml-service-listing:
+    build:
+      context: ./ml_service_listing
+      dockerfile: Dockerfile
+    ports:
+      - "8010:8010"
+    environment:
+      - MODEL_PATH=/app/ml_service_listing/model/model.cbm
+      - TRAINING_DATA_PATH=/app/ml_service_listing/training/data/listings.json
+      - RETRAIN_ENABLED=true
+      - RETRAIN_ITERATIONS=50
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./ml_service_listing/ml_service_listing/model:/app/ml_service_listing/model
+      - ./ml_service_listing/ml_service_listing/training/data:/app/ml_service_listing/training/data
     restart: always
 
 volumes:

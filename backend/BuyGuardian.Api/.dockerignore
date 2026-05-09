@@ -1,0 +1,21 @@
+# Build outputs
+bin/
+obj/
+
+# IDE and tooling
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.cache
+*.log
+*.tmp
+
+# VCS
+.git/
+.gitignore
+
+# OS metadata
+.DS_Store
+Thumbs.db

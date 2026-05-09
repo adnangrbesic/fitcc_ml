@@ -1,6 +1,9 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using BuyGuardian.Api.Interfaces;
+using BuyGuardian.Api.Models;
+using BuyGuardian.Api.Models.Requests;
 
 namespace BuyGuardian.Api.Services;
 
@@ -15,6 +18,7 @@ public class MlService : IMlService
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<MlService> _logger;
+    private readonly string _trustScoreBaseUrl;
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -22,12 +26,15 @@ public class MlService : IMlService
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    public MlService(HttpClient httpClient, ILogger<MlService> logger)
+    public MlService(HttpClient httpClient, ILogger<MlService> logger, IConfiguration configuration)
     {
         _httpClient = httpClient;
-        _httpClient.BaseAddress ??= new Uri("http://ml-service:8000");
+        var anomalyBase = configuration["MlService:BaseUrl"] ?? "http://ml-service:8000";
+        _httpClient.BaseAddress ??= new Uri(anomalyBase);
         _httpClient.Timeout = TimeSpan.FromSeconds(30);
         _logger = logger;
+        _trustScoreBaseUrl = (configuration["TrustScoreService:BaseUrl"]
+            ?? "http://ml-service-listing:8010").TrimEnd('/');
     }
 
     public async Task<AnomalyResult?> GetAnomalyScoreAsync(string itemId)
@@ -64,6 +71,50 @@ public class MlService : IMlService
         }
     }
 
+    public async Task<TrustScoreResult?> GetTrustScoreAsync(Listing listing, bool retrain = true)
+    {
+        try
+        {
+            var request = new TrustScoreRequest
+            {
+                Listing = TrustScoreListingPayload.FromListing(listing),
+                Retrain = retrain,
+            };
+
+            var payload = JsonSerializer.Serialize(request, JsonOpts);
+            var content = new StringContent(payload, Encoding.UTF8, "application/json");
+            var url = $"{_trustScoreBaseUrl}/api/trust-score/predict";
+
+            var response = await _httpClient.PostAsync(url, content);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Trust score service returned {StatusCode} for listing {ItemId}",
+                    response.StatusCode,
+                    listing.ItemId);
+                return null;
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            return JsonSerializer.Deserialize<TrustScoreResult>(json, JsonOpts);
+        }
+        catch (TaskCanceledException)
+        {
+            _logger.LogWarning("Trust score request timed out for item {ItemId}", listing.ItemId);
+            return null;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Trust score service unavailable for item {ItemId}", listing.ItemId);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error calling trust score service for item {ItemId}", listing.ItemId);
+            return null;
+        }
+    }
+
     public async Task TriggerRetrainAsync(Guid productId)
     {
         try
@@ -89,6 +140,40 @@ public class MlService : IMlService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to trigger ML retrain for product {ProductId}", productId);
+        }
+    }
+
+    public async Task<TrustScoreRetrainResult?> TriggerTrustScoreFullRetrainAsync()
+    {
+        try
+        {
+            var url = $"{_trustScoreBaseUrl}/api/trust-score/retrain-full";
+            var response = await _httpClient.PostAsync(url, null);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Trust score retrain returned {StatusCode}",
+                    response.StatusCode);
+                return null;
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            return JsonSerializer.Deserialize<TrustScoreRetrainResult>(json, JsonOpts);
+        }
+        catch (TaskCanceledException)
+        {
+            _logger.LogWarning("Trust score retrain request timed out");
+            return null;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Trust score service unavailable for retrain");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error calling trust score retrain");
+            return null;
         }
     }
 }
