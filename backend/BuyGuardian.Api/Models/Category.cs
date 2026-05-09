@@ -14,4 +14,10 @@ public class Category
 
     public string? ExtractSchema { get; set; }
     public int ListingCount { get; set; }
+
+    /// <summary>
+    /// Isolation Forest contamination parameter override for this category.
+    /// Default 0.10 (10%). Lower = fewer anomalies flagged.
+    /// </summary>
+    public double IFContamination { get; set; } = 0.10;
 }

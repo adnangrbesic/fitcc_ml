@@ -45,6 +45,9 @@ builder.Services.AddScoped<ICacheService, RedisCacheService>();
 builder.Services.AddHttpClient<IEmbeddingService, EmbeddingService>();
 builder.Services.AddScoped<IProductMatcher, ProductMatcher>();
 
+// ML Anomaly Detection Service (Python microservice)
+builder.Services.AddHttpClient<IMlService, MlService>();
+
 // RabbitMQ Hosted Service
 builder.Services.AddHostedService<ListingConsumer>();
 
