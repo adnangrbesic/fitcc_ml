@@ -29,6 +29,11 @@ public class Listing
 
     public double? TrustScore { get; set; }
 
+    // Isolation Forest anomaly detection results
+    public double? AnomalyScore { get; set; }
+    public bool? IsAnomaly { get; set; }
+    public string? AnomalyType { get; set; }
+
     public bool IsActive { get; set; } = true;
     public bool IsNew { get; set; }
 

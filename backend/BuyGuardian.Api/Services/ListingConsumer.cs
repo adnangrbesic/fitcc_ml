@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using BuyGuardian.Api.Data;
 using BuyGuardian.Api.Models;
 using BuyGuardian.Api.Extensions;
+using BuyGuardian.Api.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -21,6 +22,7 @@ public class ListingConsumer : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
     private readonly IEmbeddingService _embeddingService;
+    private readonly IMlService _mlService;
     
     private IConnection? _connection;
 
@@ -35,12 +37,14 @@ public class ListingConsumer : BackgroundService
         ILogger<ListingConsumer> logger, 
         IServiceScopeFactory scopeFactory, 
         IConfiguration configuration,
-        IEmbeddingService embeddingService)
+        IEmbeddingService embeddingService,
+        IMlService mlService)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
         _configuration = configuration;
         _embeddingService = embeddingService;
+        _mlService = mlService;
         InitializeRabbitMQ();
     }
 
@@ -372,6 +376,22 @@ public class ListingConsumer : BackgroundService
             Price = listing.Price,
             RecordedAt = DateTime.UtcNow
         });
+
+        // e) Trigger ML retrain when product group crosses the threshold
+        if (product != null && product.ListingsCount >= 5)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _mlService.TriggerRetrainAsync(product.Id);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "ML retrain trigger failed for product {Id}", product.Id);
+                }
+            });
+        }
     }
 
     private bool AttributesMatch(Dictionary<string, object> existing, Dictionary<string, object> incoming)

@@ -17,5 +17,9 @@ public record ListingAnalysisResult(
     double SellerTrust,
     string? Category,
     string? ProductName,
-    int? WarrantyMonths
+    int? WarrantyMonths,
+    // Isolation Forest anomaly detection
+    double? AnomalyScore,
+    bool? IsAnomaly,
+    string? AnomalyType
 );

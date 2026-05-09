@@ -10,11 +10,13 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
 {
     private readonly BuyGuardianContext _context;
     private readonly ICacheService _cache;
+    private readonly IMlService _mlService;
 
-    public AnalyzeListingHandler(BuyGuardianContext context, ICacheService cache)
+    public AnalyzeListingHandler(BuyGuardianContext context, ICacheService cache, IMlService mlService)
     {
         _context = context;
         _cache = cache;
+        _mlService = mlService;
     }
 
     public async Task<ListingAnalysisResult> Handle(AnalyzeListingQuery request, CancellationToken cancellationToken)
@@ -70,15 +72,29 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
         }
 
         listing.TrustScore = Math.Clamp(trustScore, 0.0, 1.0);
+
+        // ── Isolation Forest Anomaly Detection ───────────────────────────
+        var anomalyResult = await _mlService.GetAnomalyScoreAsync(request.ItemId);
+        if (anomalyResult != null)
+        {
+            listing.AnomalyScore = anomalyResult.AnomalyScore;
+            listing.IsAnomaly = anomalyResult.IsAnomaly;
+            listing.AnomalyType = anomalyResult.AnomalyType;
+        }
+
         await _context.SaveChangesAsync(cancellationToken);
 
-        var isSuspicious = listing.TrustScore < 0.4;
+        var isSuspicious = listing.TrustScore < 0.4 || (listing.IsAnomaly == true);
         
         // Extract richer data
         var risks = new List<string>();
-        if (isSuspicious) risks.Add("low_trust");
+        if (listing.TrustScore < 0.4) risks.Add("low_trust");
         if (listing.PriceHistories.Count < 2) risks.Add("new_listing");
         if (listing.Seller?.AccountAgeMonths < 3) risks.Add("new_account");
+        if (listing.IsAnomaly == true && listing.AnomalyType != null)
+        {
+            risks.Add($"anomaly_{listing.AnomalyType}");
+        }
 
         int? warranty = null;
         if (listing.RawMetadata.TryGetValue("context", out var ctx) && ctx is JsonElement ctxElem)
@@ -99,7 +115,11 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
             listing.Seller?.TrustScore ?? 0.5,
             listing.Product?.CategoryName,
             listing.Product?.CanonicalName,
-            warranty
+            warranty,
+            // Isolation Forest results
+            listing.AnomalyScore,
+            listing.IsAnomaly,
+            listing.AnomalyType
         );
 
         await _cache.SetAsync(cacheKey, result, TimeSpan.FromHours(1));
