@@ -149,14 +149,14 @@ services:
     ports:
       - "8010:8010"
     environment:
-      - MODEL_PATH=/app/ml_service_listing/model/model.cbm
-      - TRAINING_DATA_PATH=/app/ml_service_listing/training/data/listings.json
+      - MODEL_PATH=/app/model/model.cbm
+      - TRAINING_DATA_PATH=/app/training/data/listings.json
       - RETRAIN_ENABLED=true
       - RETRAIN_ITERATIONS=50
       - LOG_LEVEL=INFO
     volumes:
-      - ./ml_service_listing/ml_service_listing/model:/app/ml_service_listing/model
-      - ./ml_service_listing/ml_service_listing/training/data:/app/ml_service_listing/training/data
+      - ./ml_service_listing/ml_service_listing/model.cbm:/app/model/model.cbm
+      - ./ml_service_listing/ml_service_listing/training/data:/app/training/data
     restart: always
 
 volumes:

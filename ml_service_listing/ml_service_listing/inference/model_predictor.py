@@ -27,6 +27,7 @@ class ModelTrustScorePredictor:
         self._fallback = TrustScorePredictor(logger)
         self._model = None
         self._model_mtime: float | None = None
+        self._missing_logged = False
 
     def predict_listing_with_source(self, listing: Listing) -> tuple[ScoreResult, bool]:
         model = self._get_model()
@@ -79,8 +80,24 @@ class ModelTrustScorePredictor:
         result, _ = self.predict_listing_with_source(listing)
         return result
 
+    def model_exists(self) -> bool:
+        return self._model_path.exists() and self._model_path.is_file()
+
+    def reload_model(self) -> bool:
+        model = self._get_model()
+        return model is not None
+
     def _get_model(self):
-        if not self._model_path.exists():
+        if not self._model_path.exists() or self._model_path.is_dir():
+            if not self._missing_logged:
+                self._logger.warning(
+                    "model_missing",
+                    extra={
+                        "event": "model_missing",
+                        "model_path": str(self._model_path),
+                    },
+                )
+                self._missing_logged = True
             return None
 
         mtime = self._model_path.stat().st_mtime
@@ -88,4 +105,5 @@ class ModelTrustScorePredictor:
             model = load_model(str(self._model_path))
             self._model = model
             self._model_mtime = mtime
+            self._missing_logged = False
         return self._model
