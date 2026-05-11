@@ -203,7 +203,7 @@ public class ListingConsumer : BackgroundService
                 IsPhoneVerified = msg.IsPhoneVerified,
                 IsAddressVerified = msg.IsAddressVerified,
                 AccountAgeMonths = msg.AccountAgeMonths,
-                TrustScore = msg.PositiveFeedback > 0 ? Math.Min(100, 50 + (msg.PositiveFeedback / 10.0)) : 50.0 // Dynamic initial score
+                TrustScore = CalculateSellerTrustScore(msg)
             };
             db.Sellers.Add(seller);
         }
@@ -220,8 +220,8 @@ public class ListingConsumer : BackgroundService
             seller.IsAddressVerified = msg.IsAddressVerified;
             seller.AccountAgeMonths = msg.AccountAgeMonths;
             
-            // Recalculate trust if needed
-            seller.TrustScore = msg.PositiveFeedback > 0 ? Math.Min(100, 50 + (msg.PositiveFeedback / 10.0)) : seller.TrustScore;
+            // Recalculate dynamic trust score
+            seller.TrustScore = CalculateSellerTrustScore(msg);
         }
         await db.SaveChangesAsync(stoppingToken); // Commit to get ID for FK
 
@@ -408,6 +408,47 @@ public class ListingConsumer : BackgroundService
             }
         }
         return true;
+    }
+
+    /// <summary>
+    /// Dynamic multi-factor seller trust score (0.0–1.0).
+    ///   Account Age:        15%  — capped at 36 months
+    ///   Feedback Ratio:     40%  — positive / (positive + negative + 1)
+    ///   Deliveries:         25%  — log curve, capped at 50
+    ///   Verification:       20%  — email 3%, phone 7%, address 10%
+    /// </summary>
+    private static double CalculateSellerTrustScore(ListingScrapeMessage msg)
+    {
+        // 1. Account Age (15%) — normalized 0-1 with cap at 36 months
+        double ageScore = Math.Min(msg.AccountAgeMonths / 36.0, 1.0);
+
+        // 2. Feedback Ratio (40%) — positive vs negative, smoothed
+        int totalFeedback = msg.PositiveFeedback + msg.NeutralFeedback + msg.NegativeFeedback;
+        double feedbackScore;
+        if (totalFeedback == 0)
+        {
+            feedbackScore = 0.5; // Neutral baseline for new sellers
+        }
+        else
+        {
+            feedbackScore = (double)msg.PositiveFeedback / (msg.PositiveFeedback + msg.NegativeFeedback + 1);
+        }
+
+        // 3. Successful Deliveries (25%) — log curve capped at 50
+        double deliveryScore = Math.Min(Math.Log(1 + msg.SuccessfulDeliveries) / Math.Log(51), 1.0);
+
+        // 4. Verification (20%) — email 3%, phone 7%, address 10%
+        double verificationScore = 0.0;
+        if (msg.IsEmailVerified)   verificationScore += 0.15;
+        if (msg.IsPhoneVerified)   verificationScore += 0.35;
+        if (msg.IsAddressVerified) verificationScore += 0.50;
+
+        double trust = (ageScore * 0.15)
+                     + (feedbackScore * 0.40)
+                     + (deliveryScore * 0.25)
+                     + (verificationScore * 0.20);
+
+        return Math.Clamp(trust, 0.0, 1.0);
     }
 
     private void MoveToDlq(byte[] body, string reason)

@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using BuyGuardian.Api.Data;
+using BuyGuardian.Api.Models;
 using BuyGuardian.Api.Interfaces;
 using System.Text.Json;
 
@@ -34,52 +35,53 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
         if (listing == null)
             throw new KeyNotFoundException($"Listing {request.ItemId} not found");
 
-        // Compute TrustScore (existing logic) or override with ML prediction
-        var trustScoreResult = await _mlService.GetTrustScoreAsync(listing, retrain: true);
-        if (trustScoreResult != null)
+        // ── Dynamic Seller Trust Score ────────────────────────────────────
+        double sellerTrust = 0.5;
+        if (listing.Seller != null)
         {
-            listing.TrustScore = Math.Clamp(trustScoreResult.TrustScore / 10.0, 0.0, 1.0);
+            sellerTrust = CalculateSellerTrust(listing.Seller);
+            listing.Seller.TrustScore = sellerTrust;
+        }
+
+        // ── Composite Listing Trust ──────────────────────────────────────
+        // Seller trust (50%) + Price stability (30%) + LLM condition (20%)
+        double listingTrust = sellerTrust * 0.50;
+
+        if (listing.PriceHistories.Count > 1)
+        {
+            var prices = listing.PriceHistories.Select(p => (double)p.Price).ToList();
+            var stdDev = CalculateStandardDeviation(prices);
+            var avg = prices.Average();
+            if (avg > 0)
+            {
+                var volatility = stdDev / avg;
+                listingTrust += (1.0 - Math.Min(volatility, 1.0)) * 0.30;
+            }
         }
         else
         {
-            double trustScore = 0.5; // Base score
-
-            if (listing.Seller != null)
-            {
-                trustScore += listing.Seller.TrustScore * 0.3;
-            }
-
-            if (listing.PriceHistories.Count > 1)
-            {
-                var prices = listing.PriceHistories.Select(p => (double)p.Price).ToList();
-                var stdDev = CalculateStandardDeviation(prices);
-                var avg = prices.Average();
-
-                if (avg > 0)
-                {
-                    var volatility = stdDev / avg;
-                    trustScore += (1.0 - Math.Min(volatility, 1.0)) * 0.4;
-                }
-            }
-            else
-            {
-                trustScore += 0.2;
-            }
-
-            if (listing.RawMetadata.TryGetValue("context", out var contextObj) && contextObj is JsonElement contextElem)
-            {
-                if (contextElem.TryGetProperty("condition", out var conditionElem) && conditionElem.TryGetDouble(out var condition))
-                {
-                    trustScore += condition * 0.3;
-                }
-            }
-            else
-            {
-                trustScore += 0.15;
-            }
-
-            listing.TrustScore = Math.Clamp(trustScore, 0.0, 1.0);
+            listingTrust += 0.15;
         }
+
+        if (listing.RawMetadata.TryGetValue("context", out var contextObj) && contextObj is JsonElement contextElem)
+        {
+            if (contextElem.TryGetProperty("condition", out var conditionElem) && conditionElem.TryGetDouble(out var condition))
+            {
+                listingTrust += condition * 0.20;
+            }
+        }
+        else
+        {
+            listingTrust += 0.10;
+        }
+
+        // ── Check for empty description (red flag) ────────────────────────
+        if (string.IsNullOrWhiteSpace(listing.Description) || listing.Description.Trim().Length < 5)
+        {
+            listingTrust -= 0.15; // Severe penalty
+        }
+
+        listing.TrustScore = Math.Clamp(listingTrust, 0.0, 1.0);
 
         // ── Isolation Forest Anomaly Detection ───────────────────────────
         var anomalyResult = await _mlService.GetAnomalyScoreAsync(request.ItemId);
@@ -99,6 +101,10 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
         if (listing.TrustScore < 0.4) risks.Add("low_trust");
         if (listing.PriceHistories.Count < 2) risks.Add("new_listing");
         if (listing.Seller?.AccountAgeMonths < 3) risks.Add("new_account");
+        if (string.IsNullOrWhiteSpace(listing.Description) || listing.Description.Trim().Length < 5)
+        {
+            risks.Add("empty_description");
+        }
         if (listing.IsAnomaly == true && listing.AnomalyType != null)
         {
             risks.Add($"anomaly_{listing.AnomalyType}");
@@ -120,11 +126,11 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
             listing.Product?.AvgPrice ?? listing.Price,
             listing.Price,
             risks.ToArray(),
-            listing.Seller?.TrustScore ?? 0.5,
+            sellerTrust, // Use the freshly calculated seller trust (0.0-1.0)
             listing.Product?.CategoryName,
             listing.Product?.CanonicalName,
             warranty,
-            // Isolation Forest results
+            // Isolation Forest anomaly detection
             listing.AnomalyScore,
             listing.IsAnomaly,
             listing.AnomalyType
@@ -139,5 +145,33 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
     {
         double avg = values.Average();
         return Math.Sqrt(values.Average(v => Math.Pow(v - avg, 2)));
+    }
+
+    /// <summary>
+    /// Dynamic multi-factor seller trust score (0.0–1.0) from Seller entity.
+    /// Mirrors the ListingConsumer formula but reads from the DB entity directly.
+    /// </summary>
+    private static double CalculateSellerTrust(Seller seller)
+    {
+        double ageScore = Math.Min(seller.AccountAgeMonths / 36.0, 1.0);
+
+        int totalFeedback = seller.PositiveFeedback + seller.NeutralFeedback + seller.NegativeFeedback;
+        double feedbackScore = totalFeedback == 0
+            ? 0.5
+            : (double)seller.PositiveFeedback / (seller.PositiveFeedback + seller.NegativeFeedback + 1);
+
+        double deliveryScore = Math.Min(Math.Log(1 + seller.SuccessfulDeliveries) / Math.Log(51), 1.0);
+
+        double verificationScore = 0.0;
+        if (seller.IsEmailVerified)   verificationScore += 0.15;
+        if (seller.IsPhoneVerified)   verificationScore += 0.35;
+        if (seller.IsAddressVerified) verificationScore += 0.50;
+
+        double trust = (ageScore * 0.15)
+                     + (feedbackScore * 0.40)
+                     + (deliveryScore * 0.25)
+                     + (verificationScore * 0.20);
+
+        return Math.Clamp(trust, 0.0, 1.0);
     }
 }

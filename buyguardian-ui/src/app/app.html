@@ -8,6 +8,9 @@
     @if (detectedFromTab()) {
       <mat-icon class="detected-icon" matTooltip="Detektovan OLX oglas">verified</mat-icon>
     }
+    <button mat-icon-button (click)="toggleSettings()" class="settings-btn" matTooltip="Podešavanja">
+      <mat-icon>{{ showSettings() ? 'close' : 'settings' }}</mat-icon>
+    </button>
   </mat-toolbar>
 
   <!-- PROGRESS BAR -->
@@ -17,36 +20,53 @@
 
   <div class="content">
 
-    <!-- SKELETON LOADING -->
-    @if (loading() || isProcessing()) {
-      <div class="skeleton-container">
-        @if (isProcessing()) {
-          <div class="processing-info">
-            <mat-icon class="spin-icon">sync</mat-icon>
-            <span class="processing-text">{{ error()?.message }}</span>
-            <button mat-flat-button color="primary" (click)="analyze()" class="refresh-btn">
-              OSVJEŽI
-            </button>
-          </div>
-        }
-        <div class="skeleton-card"></div>
-        <div class="skeleton-line short"></div>
-        <div class="skeleton-line long"></div>
-        <div class="skeleton-line medium"></div>
-      </div>
-    }
+    @if (showSettings()) {
+      <div class="settings-view">
+        <h3 class="section-title"><mat-icon>settings</mat-icon> Podešavanja</h3>
+        
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>API Adresa Servera</mat-label>
+          <input matInput [(ngModel)]="settingsApiUrl" placeholder="http://localhost:5000">
+          <mat-hint>npr. http://192.168.1.x:5000</mat-hint>
+        </mat-form-field>
 
-    <!-- ERROR STATE -->
-    @if (error() && !loading() && !isProcessing()) {
-      <div class="error-card">
-        <mat-icon>{{ error()!.offline ? 'wifi_off' : 'error_outline' }}</mat-icon>
-        <p>{{ error()!.message }}</p>
+        <button mat-raised-button color="primary" (click)="saveSettings()" class="save-btn">
+          SPASI PODEŠAVANJA
+        </button>
       </div>
-    }
+    } @else {
 
-    <!-- RESULTS -->
-    @if (result(); as res) {
-      <div class="results">
+      <!-- SKELETON LOADING -->
+      @if (loading() || isProcessing()) {
+        <div class="skeleton-container">
+          @if (isProcessing()) {
+            <div class="processing-info">
+              <mat-icon class="spin-icon">sync</mat-icon>
+              <span class="processing-text">{{ error()?.message }}</span>
+              <button mat-flat-button color="primary" (click)="analyze()" class="refresh-btn">
+                OSVJEŽI
+              </button>
+            </div>
+          }
+          <div class="skeleton-card"></div>
+          <div class="skeleton-line short"></div>
+          <div class="skeleton-line long"></div>
+          <div class="skeleton-line medium"></div>
+        </div>
+      }
+
+      <!-- ERROR STATE -->
+      @if (error() && !loading() && !isProcessing()) {
+        <div class="error-card">
+          <mat-icon>{{ error()!.offline ? 'wifi_off' : 'error_outline' }}</mat-icon>
+          <p>{{ error()!.message }}</p>
+        </div>
+      }
+
+      <!-- RESULTS -->
+      @if (result(); as res) {
+        <div class="results">
+          <!-- (rest is unchanged inside result condition block) -->
 
         <!-- TRUST SCORE -->
         <mat-card class="trust-card" [class]="getTrustColor(res.trustScore)">
@@ -151,8 +171,55 @@
           </section>
         }
 
-      </div>
-    }
+        <!-- RECOMMENDATIONS -->
+        @if (recommendations().length > 0) {
+          <mat-divider></mat-divider>
+          <section class="recommendations-section">
+            <h3 class="section-title rec-title">
+              <mat-icon>recommend</mat-icon> Preporučeni oglasi
+            </h3>
+            <div class="rec-cards">
+              @for (rec of recommendations(); track rec.itemId) {
+                <div class="rec-card" (click)="openListing(rec.itemId)"
+                     [style.border-left-color]="getRecTypeColor(rec.type)">
+                  <div class="rec-header">
+                    <mat-icon [style.color]="getRecTypeColor(rec.type)">{{ getRecTypeIcon(rec.type) }}</mat-icon>
+                    <span class="rec-badge" [style.background]="getRecTypeColor(rec.type) + '20'"
+                          [style.color]="getRecTypeColor(rec.type)">
+                      {{ rec.badge }}
+                    </span>
+                  </div>
+                  <div class="rec-title">{{ rec.productName }}</div>
+                  <div class="rec-price">{{ rec.price | number:'1.0-0' }} KM</div>
+                  <div class="rec-reason">{{ rec.reason }}</div>
+                  <div class="rec-seller">
+                    <mat-icon class="rec-seller-icon">person</mat-icon>
+                    <span>{{ rec.sellerName }}</span>
+                    <span class="rec-trust-pill"
+                          [class.high]="rec.sellerTrust >= 0.7"
+                          [class.medium]="rec.sellerTrust >= 0.4 && rec.sellerTrust < 0.7">
+                      {{ rec.sellerTrust * 100 | number:'1.0-0' }}%
+                    </span>
+                  </div>
+                </div>
+              }
+            </div>
+          </section>
+        } @else if (loadingRecs()) {
+          <mat-divider></mat-divider>
+          <section class="recommendations-section">
+            <h3 class="section-title rec-title">
+              <mat-icon>recommend</mat-icon> Preporučeni oglasi
+            </h3>
+            <div class="rec-loading">
+              <mat-progress-spinner mode="indeterminate" diameter="24" color="accent"></mat-progress-spinner>
+              <span>Tražim preporuke...</span>
+            </div>
+          </section>
+        }
 
+      </div>
+      }
+    }
   </div>
 </div>

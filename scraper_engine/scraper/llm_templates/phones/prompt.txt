@@ -6,19 +6,25 @@ You're a data extraction engine for mobile phones. Your goal is to extract struc
 // INSTRUCTIONS
 1. **canonical_name**: This is the most important field. It MUST include:
    - Brand (e.g., iPhone, Samsung)
-   - Model (e.g., 15 Pro, S24 Ultra)
+   - Model (e.g., 15, S24)
    - Storage (e.g., 128GB, 1TB)
    - Color if available.
-   Example: "iPhone 15 Pro 128GB Black" or "Samsung S24 Ultra 512GB Titanium Gray".
+   Example: "iPhone 15 128GB Black" or "Samsung S24 512GB Gray".
+   **Crucial**: Be VERY careful with suffixes. Do NOT add "Pro", "Ultra", "Plus" unless EXPLICITLY written. An "iPhone 15" is NOT a "Pro".
    **Crucial**: Products with different storage (128GB vs 512GB) MUST have different canonical names.
 
 2. **brand** & **model**: Extract these as plain strings.
 
-3. **storage_gb** & **ram_gb**: Extract as integers. If not found, use 0.
+3. **storage_gb** & **ram_gb**: Extract as integers.
+   - In patterns like "8+256" or "8/128", the smaller number (8) is RAM and the larger number (256/128) is STORAGE.
+   - Use 0 if not found.
 
 4. **condition_score**: A value from 0.0 to 1.0 representing the state (1.0 is brand new/sealed, 0.5 is used with visible wear, 0.1 is broken/for parts).
 
-5. **warranty_months**: Number of months of warranty remaining. 0 if none.
+5. **warranty_months**: Integer. Number of months of remaining warranty.
+   - **CRITICAL**: DO NOT count renewal dates like "OBNOVLJEN - 31.05.2026" as warranty. They have nothing to do with it.
+   - Extract warranty ONLY if words like "garancija", "warranty", "pismena garancija" are explicitly in the description followed by a time period.
+   - Default is 0. NEVER assume or guess a warranty.
 
 6. **is_global_version**: Boolean. True if it's a global/EU version, False if it's US/CN only or network locked.
 

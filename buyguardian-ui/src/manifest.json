@@ -34,7 +34,8 @@
   ],
   "host_permissions": [
     "*://*.olx.ba/*",
-    "http://localhost:5000/*"
+    "http://localhost:5000/*",
+    "http://192.168.1.8:5000/*"
   ],
   "web_accessible_resources": [
     {
