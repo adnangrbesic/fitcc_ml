@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
@@ -36,6 +37,9 @@ class PredictResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     model_path: str
+    model_exists: bool
+    model_mtime: float | None
+    data_rows: int
 
 
 class RetrainFullResponse(BaseModel):
@@ -59,7 +63,19 @@ app = FastAPI(
 
 @app.get("/api/trust-score/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
-    return HealthResponse(status="ok", model_path=_settings.model_path)
+    model_path = Path(_settings.model_path)
+    model_exists = _predictor.model_exists()
+    model_mtime = None
+    if model_exists:
+        model_mtime = model_path.stat().st_mtime
+    data_rows = get_training_data_count(_settings.training_data_path)
+    return HealthResponse(
+        status="ok",
+        model_path=_settings.model_path,
+        model_exists=model_exists,
+        model_mtime=model_mtime,
+        data_rows=data_rows,
+    )
 
 
 @app.post("/api/trust-score/predict", response_model=PredictResponse)
@@ -74,11 +90,26 @@ async def predict_trust_score(
     if listing.listing_id in (None, ""):
         raise HTTPException(status_code=400, detail="listing id is required")
 
-    result, model_used = _predictor.predict_listing_with_source(listing)
-
     retrain_requested = request.retrain
     if retrain_requested is None:
         retrain_requested = _settings.retrain_enabled
+
+    if retrain_requested and not _predictor.model_exists():
+        rows = get_training_data_count(_settings.training_data_path)
+        if rows > 0:
+            _logger.info(
+                "model_warmup",
+                extra={"event": "model_warmup", "rows": rows},
+            )
+            retrain_incremental(
+                data_path=_settings.training_data_path,
+                model_path=_settings.model_path,
+                retrain_iterations=_settings.retrain_iterations,
+                logger=_logger,
+            )
+            _predictor.reload_model()
+
+    result, model_used = _predictor.predict_listing_with_source(listing)
 
     if retrain_requested:
         label = request.label if request.label is not None else result.trust_score
