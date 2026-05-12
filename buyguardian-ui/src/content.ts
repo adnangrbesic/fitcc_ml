@@ -43,7 +43,7 @@ function injectFloatingBadge(data: any) {
 
   // Determine color & label
   let color: string, bgColor: string, label: string;
-  if (isSuspicious) {
+  if (isSuspicious && (trustScore === null || trustScore < 7.5)) {
     color = '#ff4444';
     bgColor = 'rgba(255, 68, 68, 0.15)';
     label = 'Sumnjiv oglas';

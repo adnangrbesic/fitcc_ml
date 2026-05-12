@@ -18,6 +18,15 @@ export interface AnalysisResult {
   anomalyScore?: number;
   isAnomaly?: boolean;
   anomalyType?: string;
+  // Expanded stats
+  positiveFeedback?: number;
+  negativeFeedback?: number;
+  successfulDeliveries?: number;
+  accountAgeMonths?: number;
+  cheapestItemId?: string;
+  cheapestPrice?: number;
+  cheapestTitle?: string;
+  cheapestSellerName?: string;
 }
 
 export interface Recommendation {
@@ -38,15 +47,40 @@ export interface AnalysisError {
 }
 
 const RISK_LABELS: Record<string, string> = {
+  low_trust: 'Nizak nivo povjerenja',
+  new_listing: 'Novi oglas',
+  new_account: 'Novi korisnički profil',
+  high_volatility: 'Nestabilna cijena',
+  empty_description: 'Nedostaje opis artikla',
   low_feedback: 'Malo feedbacka',
   price_too_low: 'Sumnjivo niska cijena',
-  new_account: 'Novi nalog',
-  new_listing: 'Novi oglas',
   no_phone: 'Nema telefona',
   no_email: 'Email nije verifikovan',
   high_price: 'Cijena iznad prosjeka',
-  low_trust: 'Nizak seller trust',
-  empty_description: 'Prazan opis oglasa',
+};
+
+const RISK_EXPLANATIONS: Record<string, string> = {
+  low_trust: 'Ukupna analiza ukazuje na pojačane rizike kupovine kod ovog artikla.',
+  new_listing: 'Oglas je postavljen nedavno i nemamo historiju kretanja cijene za praćenje manipulacije.',
+  new_account: 'Profil prodavača je svjež (manje od 3 mjeseca starosti), budite oprezni.',
+  high_volatility: 'Cijena ovog proizvoda često varira u kratkom vremenu.',
+  empty_description: 'Oglas nema tekstualni opis što je čest pokazatelj lažnih oglasa ili spama.',
+  underpriced: 'Cijena je statistički znatno niža od tržišnog prosjeka za ovaj model.',
+  overpriced: 'Proizvod se prodaje po cijeni znatno većoj od trenutnog tržišnog vrha.',
+  price_anomaly: 'Mašinsko učenje je detektovalo nepravilnost u korelaciji cijene i ostatka ponude.',
+  suspicious_profile: 'Analiza profila ukazuje na anomalije u aktivnostima ili verifikaciji.',
+  unverified_seller: 'Korisnik nije prošao validaciju broja telefona ili emaila.',
+  condition_price_mismatch: 'Prijavljeno stanje proizvoda ne odgovara cijeni po kojoj se prodaje.',
+  too_good_to_be_true: 'Sve statistike ovog oglasa su na granici realnog, preporučujemo dodatnu provjeru.',
+  suspicious_description: 'Uzorak pisanja u opisu podsjeća na generisani spam ili lažne informacije.',
+  price_deviation: 'Veliko statističko odstupanje od medijana grupacije.',
+  condition_to_price: 'Skener stanja i cijene detektuje nelogičnost.',
+  warranty_weight: 'Vremenski okvir garancije izgleda nelogično ili izmišljeno.',
+  seller_reliability: 'Učestalost transakcija ili statistike upućuju na slab rejting prodavača.',
+  negative_feedback_ratio: 'Visok procenat negativnih dojmova u odnosu na ukupan broj prodaja.',
+  spam_score: 'Visoka vjerovatnoća da je oglas kreiran botom ili skriptom.',
+  listing_staleness: 'Oglas predugo stoji bez izmjena dok tržište diktira druge uslove.',
+  price_volatility: 'Izražene varijacije cijene unutar samog artikla u bazi podataka.',
 };
 
 @Injectable({ providedIn: 'root' })
@@ -160,9 +194,9 @@ export class BuyGuardianService {
   }
 
   getRiskLabel(risk: string): string {
-    // Handle anomaly_ prefixed risks
-    if (risk.startsWith('anomaly_')) {
-      const type = risk.replace('anomaly_', '');
+    // Defensive cleanup of accidental stacked prefixes: "anomaly_anomaly_something" -> "something"
+    if (risk.includes('anomaly_')) {
+      const type = risk.replace(/anomaly_/g, '').trim();
       const anomalyLabels: Record<string, string> = {
         underpriced: 'Sumnjivo niska cijena (ML)',
         overpriced: 'Previsoka cijena (ML)',
@@ -184,6 +218,14 @@ export class BuyGuardianService {
       return anomalyLabels[type] ?? `Anomalija: ${type.replace(/_/g, ' ')}`;
     }
     return RISK_LABELS[risk] ?? risk.replace(/_/g, ' ');
+  }
+
+  getRiskExplanation(risk: string): string {
+    if (risk.includes('anomaly_')) {
+      const type = risk.replace(/anomaly_/g, '').trim();
+      return RISK_EXPLANATIONS[type] ?? 'ML model je detektovao odstupanje od standardnih obrazaca trgovine.';
+    }
+    return RISK_EXPLANATIONS[risk] ?? 'Dodatni faktor rizika uočen tokom automatske inspekcije oglasa.';
   }
 
 }

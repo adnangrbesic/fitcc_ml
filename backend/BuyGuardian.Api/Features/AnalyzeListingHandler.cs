@@ -12,12 +12,14 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
     private readonly BuyGuardianContext _context;
     private readonly ICacheService _cache;
     private readonly IMlService _mlService;
+    private readonly IHttpClientFactory _httpClientFactory;
 
-    public AnalyzeListingHandler(BuyGuardianContext context, ICacheService cache, IMlService mlService)
+    public AnalyzeListingHandler(BuyGuardianContext context, ICacheService cache, IMlService mlService, IHttpClientFactory httpClientFactory)
     {
         _context = context;
         _cache = cache;
         _mlService = mlService;
+        _httpClientFactory = httpClientFactory;
     }
 
     public async Task<ListingAnalysisResult> Handle(AnalyzeListingQuery request, CancellationToken cancellationToken)
@@ -60,7 +62,7 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
         }
         else
         {
-            listingTrust += 0.15;
+            listingTrust += 0.22; // Raised from 0.15: reduce overall trust drag for new listings
         }
 
         if (listing.RawMetadata.TryGetValue("context", out var contextObj) && contextObj is JsonElement contextElem)
@@ -105,9 +107,17 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
         {
             risks.Add("empty_description");
         }
-        if (listing.IsAnomaly == true && listing.AnomalyType != null)
+        if (listing.IsAnomaly == true && !string.IsNullOrEmpty(listing.AnomalyType))
         {
-            risks.Add($"anomaly_{listing.AnomalyType}");
+            string type = listing.AnomalyType.Replace("anomaly_", "").Trim();
+            risks.Add($"anomaly_{type}");
+        }
+
+        // Resolve contradictions: Can't be "New" and "Stale" simultaneously. 
+        // If stale is explicit from ML/Scrape, hide the base "new_listing" database tag.
+        if (risks.Contains("anomaly_listing_staleness") && risks.Contains("new_listing"))
+        {
+            risks.Remove("new_listing");
         }
 
         int? warranty = null;
@@ -115,6 +125,52 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
         {
             if (ctxElem.TryGetProperty("warranty_months", out var wElem) && wElem.TryGetInt32(out var w))
                 warranty = w;
+        }
+        // Locate exact same product group price minimum for end user reality check
+        // Fetch top 5 logical candidates to run a live verification check on
+        var candidates = new List<dynamic>();
+        if (listing.ProductId.HasValue)
+        {
+            var rawList = await _context.Listings
+                .Where(l => l.ProductId == listing.ProductId && l.IsActive && l.ItemId != listing.ItemId && l.Price > 0)
+                .Where(l => l.TrustScore > 0.65)
+                .OrderBy(l => l.Price)
+                .Take(5) 
+                .Select(l => new { 
+                    ItemId = l.ItemId, 
+                    Price = l.Price, 
+                    Title = l.Title, 
+                    SellerName = l.Seller != null ? l.Seller.Username : "Nepoznat" 
+                })
+                .ToListAsync(cancellationToken);
+            
+            foreach(var item in rawList) candidates.Add(item);
+        }
+
+        // Dynamic real-time survival check engine
+        dynamic? verifiedCheapest = null;
+        var client = _httpClientFactory.CreateClient();
+        client.Timeout = TimeSpan.FromSeconds(1.5); // Ultra tight timeout for fast responses
+
+        foreach (var c in candidates)
+        {
+            try 
+            {
+                string cleanId = c.ItemId.ToString().TrimStart('/');
+                // Send light HEAD or GET request to olx verification endpoint
+                var response = await client.GetAsync($"https://www.olx.ba/artikal/{cleanId}", HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    verifiedCheapest = c; // Found first live one!
+                    break;
+                }
+            }
+            catch
+            {
+                // Silently continue to next candidate if current one times out or errors
+                continue;
+            }
         }
 
         var result = new ListingAnalysisResult(
@@ -133,7 +189,15 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
             // Isolation Forest anomaly detection
             listing.AnomalyScore,
             listing.IsAnomaly,
-            listing.AnomalyType
+            listing.AnomalyType,
+            listing.Seller?.PositiveFeedback,
+            listing.Seller?.NegativeFeedback,
+            listing.Seller?.SuccessfulDeliveries,
+            listing.Seller?.AccountAgeMonths,
+            verifiedCheapest?.ItemId,
+            verifiedCheapest?.Price,
+            verifiedCheapest?.Title,
+            verifiedCheapest?.SellerName
         );
 
         await _cache.SetAsync(cacheKey, result, TimeSpan.FromHours(1));

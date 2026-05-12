@@ -32,6 +32,8 @@ var dataSource = dataSourceBuilder.Build();
 builder.Services.AddDbContext<BuyGuardianContext>(options =>
     options.UseNpgsql(dataSource, o => o.UseVector()));
 
+builder.Services.AddHttpClient();
+
 
 // MediatR
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));

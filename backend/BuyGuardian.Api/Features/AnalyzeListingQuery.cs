@@ -21,5 +21,15 @@ public record ListingAnalysisResult(
     // Isolation Forest anomaly detection
     double? AnomalyScore,
     bool? IsAnomaly,
-    string? AnomalyType
+    string? AnomalyType,
+    // Seller Details for transparent UI stats
+    int? PositiveFeedback,
+    int? NegativeFeedback,
+    int? SuccessfulDeliveries,
+    int? AccountAgeMonths,
+    // Target comparative price point
+    string? CheapestItemId,
+    decimal? CheapestPrice,
+    string? CheapestTitle,
+    string? CheapestSellerName
 );

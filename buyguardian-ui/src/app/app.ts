@@ -172,6 +172,31 @@ export class App implements OnInit {
     return this.service.getRiskLabel(risk);
   }
 
+  getRiskExplanation(risk: string): string {
+    return this.service.getRiskExplanation(risk);
+  }
+
+  formatName(name?: string): string {
+    if (!name) return '';
+    return name.split(' ')
+      .map(word => {
+        if (!word) return '';
+        const lower = word.toLowerCase();
+        if (lower === 'iphone') return 'iPhone';
+        if (lower.endsWith('gb')) return lower.toUpperCase(); // "256gb" -> "256GB"
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+      })
+      .join(' ');
+  }
+
+  formatAge(months?: number): string {
+    if (!months) return '0m';
+    if (months < 12) return `${months}m`;
+    const yrs = months / 12;
+    if (yrs % 1 === 0) return `${yrs} god`;
+    return `${yrs.toFixed(1)} god`;
+  }
+
   getPriceDiff(market: number, listing?: number): number | null {
     if (!listing || !market) return null;
     return Math.round(((listing - market) / market) * 100);
@@ -196,7 +221,9 @@ export class App implements OnInit {
   }
 
   openListing(itemId: string): void {
-    const url = `https://www.olx.ba/artikal/${itemId}`;
+    // Defensively strip any leading slashes that might exist in DB
+    const cleanId = itemId?.toString().replace(/^\/+/, '') ?? '';
+    const url = `https://www.olx.ba/artikal/${cleanId}`;
     chrome?.tabs?.create({ url }) ?? window.open(url, '_blank');
   }
 }

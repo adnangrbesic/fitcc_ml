@@ -66,11 +66,11 @@
       <!-- RESULTS -->
       @if (result(); as res) {
         <div class="results">
-          <!-- (rest is unchanged inside result condition block) -->
 
         <!-- TRUST SCORE -->
-        <mat-card class="trust-card" [class]="getTrustColor(res.trustScore)">
-          <mat-card-content>
+        <mat-card class="trust-card" [ngClass]="getTrustColor(res.trustScore)">
+          <div class="trust-specular"></div>
+          <mat-card-content class="trust-layout">
             <div class="trust-grid">
               <div class="trust-score">
                 @if (res.trustScore !== null && res.trustScore !== undefined) {
@@ -89,7 +89,7 @@
                   }
                 </div>
                 @if (res.productName) {
-                  <div class="product-name">{{ res.productName }}</div>
+                  <div class="product-name">{{ formatName(res.productName) }}</div>
                 }
                 @if (res.category) {
                   <div class="category-chip">{{ res.category }}</div>
@@ -98,8 +98,6 @@
             </div>
           </mat-card-content>
         </mat-card>
-
-        <mat-divider></mat-divider>
 
         <!-- PRICE COMPARISON -->
         @if (res.marketPrice) {
@@ -125,8 +123,30 @@
                 }
               }
             </div>
+            @if (res.cheapestItemId && res.cheapestPrice) {
+              <div class="cheapest-wrapper">
+                @if (res.listingPrice && res.cheapestPrice >= res.listingPrice) {
+                  <div class="best-deal-banner">
+                    <mat-icon>verified</mat-icon>
+                    <span>Čestitamo! Ovo je trenutno najpovoljniji pouzdan oglas u bazi!</span>
+                  </div>
+                } @else {
+                  <div class="cheapest-mini-lbl">NAJJEFTINIJI POUZDANI OGLAS IZ BAZE</div>
+                  <div class="cheapest-comparison" (click)="openListing(res.cheapestItemId)">
+                    <div class="cheapest-top">
+                      <span class="cheapest-title">{{ formatName(res.cheapestTitle || 'Oglas iz baze') }}</span>
+                      <span class="cheapest-price-tag">{{ res.cheapestPrice | number:'1.0-0' }} KM</span>
+                    </div>
+                    <div class="cheapest-bot">
+                      <span class="cheapest-seller"><mat-icon>store</mat-icon> {{ res.cheapestSellerName || 'Prodavač' }}</span>
+                      <span class="cheapest-action">Otvori <mat-icon>arrow_forward</mat-icon></span>
+                    </div>
+                  </div>
+                }
+              </div>
+            }
           </section>
-          <mat-divider></mat-divider>
+
         }
 
         <!-- SELLER -->
@@ -148,22 +168,42 @@
             @if (res.warrantyMonths && res.warrantyMonths > 0) {
               <div class="seller-item">
                 <mat-icon class="warranty-icon">verified_user</mat-icon>
-                <span>Garancija {{ res.warrantyMonths }} mj.</span>
+                <span class="warranty-text">Garancija {{ res.warrantyMonths }} mj.</span>
               </div>
             }
+            
+            <!-- Seller stats expansion -->
+            <div class="seller-details-grid">
+              <div class="stat-box">
+                <span class="stat-val positive">{{ res.positiveFeedback || 0 }}</span>
+                <span class="stat-lbl">Pozitivni</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-val negative">{{ res.negativeFeedback || 0 }}</span>
+                <span class="stat-lbl">Negativni</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-val">{{ res.successfulDeliveries || 0 }}</span>
+                <span class="stat-lbl">Dostava</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-val">{{ formatAge(res.accountAgeMonths) }}</span>
+                <span class="stat-lbl">Starost</span>
+              </div>
+            </div>
           </div>
         </section>
 
         <!-- RISKS -->
         @if (res.risks?.length) {
-          <mat-divider></mat-divider>
           <section class="risks-section">
             <h3 class="section-title warn-title">
               <mat-icon>warning_amber</mat-icon> Rizici
             </h3>
-            <mat-chip-set>
+            <mat-chip-set class="risk-list">
               @for (risk of res.risks; track risk) {
-                <mat-chip highlighted color="warn" class="risk-chip">
+                <mat-chip highlighted color="warn" class="risk-chip" [matTooltip]="getRiskExplanation(risk)">
+                  <mat-icon matChipAvatar style="font-size:16px; width:16px; height:16px; margin-left:4px;">info</mat-icon>
                   {{ getRiskLabel(risk) }}
                 </mat-chip>
               }
@@ -173,9 +213,8 @@
 
         <!-- RECOMMENDATIONS -->
         @if (recommendations().length > 0) {
-          <mat-divider></mat-divider>
           <section class="recommendations-section">
-            <h3 class="section-title rec-title">
+            <h3 class="section-title rec-title-head">
               <mat-icon>recommend</mat-icon> Preporučeni oglasi
             </h3>
             <div class="rec-cards">
@@ -189,7 +228,7 @@
                       {{ rec.badge }}
                     </span>
                   </div>
-                  <div class="rec-title">{{ rec.productName }}</div>
+                  <div class="rec-title">{{ formatName(rec.productName) }}</div>
                   <div class="rec-price">{{ rec.price | number:'1.0-0' }} KM</div>
                   <div class="rec-reason">{{ rec.reason }}</div>
                   <div class="rec-seller">
@@ -198,7 +237,7 @@
                     <span class="rec-trust-pill"
                           [class.high]="rec.sellerTrust >= 0.7"
                           [class.medium]="rec.sellerTrust >= 0.4 && rec.sellerTrust < 0.7">
-                      {{ rec.sellerTrust * 100 | number:'1.0-0' }}%
+                      {{ (rec.sellerTrust >= 1.0 ? rec.sellerTrust / 100.0 : rec.sellerTrust) * 100 | number:'1.0-0' }}%
                     </span>
                   </div>
                 </div>
@@ -206,9 +245,8 @@
             </div>
           </section>
         } @else if (loadingRecs()) {
-          <mat-divider></mat-divider>
           <section class="recommendations-section">
-            <h3 class="section-title rec-title">
+            <h3 class="section-title rec-title-head">
               <mat-icon>recommend</mat-icon> Preporučeni oglasi
             </h3>
             <div class="rec-loading">

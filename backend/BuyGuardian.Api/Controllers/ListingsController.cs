@@ -157,7 +157,7 @@ public class ListingsController : ControllerBase
                 l.Title,
                 l.Price,
                 l.TrustScore,
-                SellerTrust = l.Seller!.TrustScore,
+                SellerTrust = l.Seller!.TrustScore > 1.0 ? l.Seller.TrustScore / 100.0 : l.Seller.TrustScore,
                 SellerName = l.Seller.Username,
                 ProductName = l.Product!.CanonicalName,
                 ProductAttrs = l.Product.Attributes,
