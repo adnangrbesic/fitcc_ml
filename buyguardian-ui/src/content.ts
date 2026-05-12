@@ -38,7 +38,30 @@ function injectFloatingBadge(data: any) {
   const existing = document.getElementById('buyguardian-badge');
   if (existing) existing.remove();
 
-  const trustScore = data.trustScore;
+  const trustScore = data.overallScore ?? data.trustScore;
+  const listingScore = data.trustScore;
+  const sellerScore = typeof data.sellerTrust === 'number' ? data.sellerTrust * 10 : null;
+  const priceScore = typeof data.anomalyScore === 'number' ? data.anomalyScore : null;
+  const listingWeightLabel = '70% · max 10';
+  const sellerWeightLabel = '30% · max 10';
+  const priceWeightLabel = 'penalty 0-2 (lower better)';
+  const priceLabel = data.isAnomaly
+    ? (data.anomalyType
+      ? String(data.anomalyType).replace(/^anomaly_/, '').replace(/_/g, ' ')
+      : 'anomaly')
+    : (priceScore !== null ? 'normal' : 'n/a');
+
+  const formatScore = (value: number | null | undefined) => {
+    if (value === null || value === undefined || Number.isNaN(value)) return 'N/A';
+    return value.toFixed(1);
+  };
+
+  const formatPrice = () => {
+    if (priceScore === null || priceScore === undefined || Number.isNaN(priceScore)) {
+      return 'N/A';
+    }
+    return `${priceScore.toFixed(2)} (${priceLabel})`;
+  };
   const isSuspicious = data.isSuspicious;
 
   // Determine color & label
@@ -64,7 +87,7 @@ function injectFloatingBadge(data: any) {
   const badge = document.createElement('div');
   badge.id = 'buyguardian-badge';
   badge.innerHTML = `
-    <div style="
+    <div class="buyguardian-badge" style="
       position: fixed;
       bottom: 24px;
       right: 24px;
@@ -87,6 +110,23 @@ function injectFloatingBadge(data: any) {
     onmouseover="this.style.transform='scale(1.05) translateY(-2px)'; this.style.boxShadow='0 12px 40px rgba(0,0,0,0.3), 0 0 20px ${color}30'"
     onmouseout="this.style.transform='scale(1) translateY(0)'; this.style.boxShadow='0 8px 32px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.05)'"
     >
+      <div class="buyguardian-tooltip">
+        <div class="buyguardian-tooltip-row">
+          <span>Listing:</span>
+          <strong>${formatScore(listingScore)}</strong>
+          <span class="buyguardian-tooltip-meta">${listingWeightLabel}</span>
+        </div>
+        <div class="buyguardian-tooltip-row">
+          <span>Seller:</span>
+          <strong>${formatScore(sellerScore)}</strong>
+          <span class="buyguardian-tooltip-meta">${sellerWeightLabel}</span>
+        </div>
+        <div class="buyguardian-tooltip-row">
+          <span>Price:</span>
+          <strong>${formatPrice()}</strong>
+          <span class="buyguardian-tooltip-meta">${priceWeightLabel}</span>
+        </div>
+      </div>
       <div style="
         width: 40px; height: 40px;
         border-radius: 50%;
@@ -104,6 +144,55 @@ function injectFloatingBadge(data: any) {
       @keyframes buyguardian-slide-in {
         from { opacity: 0; transform: translateY(20px) scale(0.95); }
         to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+
+      .buyguardian-tooltip {
+        position: absolute;
+        bottom: calc(100% + 10px);
+        right: 0;
+        background: rgba(0, 0, 0, 0.85);
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 11px;
+        line-height: 1.4;
+        display: grid;
+        gap: 4px;
+        min-width: 160px;
+        opacity: 0;
+        transform: translateY(6px);
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        pointer-events: none;
+        box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+      }
+
+      .buyguardian-tooltip-row {
+        display: grid;
+        grid-template-columns: auto auto 1fr;
+        align-items: center;
+        column-gap: 6px;
+      }
+
+      .buyguardian-tooltip span {
+        color: rgba(255, 255, 255, 0.7);
+        margin-right: 6px;
+      }
+
+      .buyguardian-tooltip strong {
+        font-weight: 700;
+        color: #fff;
+      }
+
+      .buyguardian-tooltip-meta {
+        color: rgba(255, 255, 255, 0.55);
+        font-size: 10px;
+        text-align: right;
+      }
+
+      .buyguardian-badge:hover .buyguardian-tooltip {
+        opacity: 1;
+        transform: translateY(0);
       }
     </style>
   `;

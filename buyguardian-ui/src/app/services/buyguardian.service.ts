@@ -5,6 +5,8 @@ import { catchError, timeout } from 'rxjs/operators';
 
 export interface AnalysisResult {
   trustScore: number;
+  overallScore?: number;
+  isNewSeller?: boolean;
   marketPrice: number;
   listingPrice?: number;
   risks: string[];

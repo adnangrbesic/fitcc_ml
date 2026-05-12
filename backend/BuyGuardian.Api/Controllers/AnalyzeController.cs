@@ -23,6 +23,10 @@ public class AnalyzeController : ControllerBase
             var result = await _mediator.Send(new AnalyzeListingQuery(itemId));
             return Ok(result);
         }
+        catch (TrustScoreUnavailableException ex)
+        {
+            return StatusCode(503, ex.Message);
+        }
         catch (KeyNotFoundException ex)
         {
             return NotFound(ex.Message);

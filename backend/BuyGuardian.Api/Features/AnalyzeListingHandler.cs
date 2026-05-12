@@ -45,45 +45,15 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
             listing.Seller.TrustScore = sellerTrust;
         }
 
-        // ── Composite Listing Trust ──────────────────────────────────────
-        // Seller trust (50%) + Price stability (30%) + LLM condition (20%)
-        double listingTrust = sellerTrust * 0.50;
-
-        if (listing.PriceHistories.Count > 1)
+        var trustScoreResult = await _mlService.GetTrustScoreAsync(listing, retrain: false);
+        if (trustScoreResult == null)
         {
-            var prices = listing.PriceHistories.Select(p => (double)p.Price).ToList();
-            var stdDev = CalculateStandardDeviation(prices);
-            var avg = prices.Average();
-            if (avg > 0)
-            {
-                var volatility = stdDev / avg;
-                listingTrust += (1.0 - Math.Min(volatility, 1.0)) * 0.30;
-            }
-        }
-        else
-        {
-            listingTrust += 0.22; // Raised from 0.15: reduce overall trust drag for new listings
+            throw new TrustScoreUnavailableException(
+                $"Trust score service unavailable for listing {request.ItemId}.");
         }
 
-        if (listing.RawMetadata.TryGetValue("context", out var contextObj) && contextObj is JsonElement contextElem)
-        {
-            if (contextElem.TryGetProperty("condition", out var conditionElem) && conditionElem.TryGetDouble(out var condition))
-            {
-                listingTrust += condition * 0.20;
-            }
-        }
-        else
-        {
-            listingTrust += 0.10;
-        }
-
-        // ── Check for empty description (red flag) ────────────────────────
-        if (string.IsNullOrWhiteSpace(listing.Description) || listing.Description.Trim().Length < 5)
-        {
-            listingTrust -= 0.15; // Severe penalty
-        }
-
-        listing.TrustScore = Math.Clamp(listingTrust, 0.0, 1.0);
+        var normalizedTrust = Math.Clamp(trustScoreResult.TrustScore / 10.0, 0.0, 1.0);
+        listing.TrustScore = normalizedTrust;
 
         // ── Isolation Forest Anomaly Detection ───────────────────────────
         var anomalyResult = await _mlService.GetAnomalyScoreAsync(request.ItemId);
@@ -97,6 +67,14 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
         await _context.SaveChangesAsync(cancellationToken);
 
         var isSuspicious = listing.TrustScore < 0.4 || (listing.IsAnomaly == true);
+        var isNewSeller = listing.Seller != null && listing.Seller.AccountAgeMonths < 3;
+        var overallScore = CalculateOverallTrustScore(
+            listing.TrustScore.Value * 10.0,
+            sellerTrust * 10.0,
+            listing.Seller,
+            listing.IsAnomaly,
+            listing.AnomalyType
+        );
         
         // Extract richer data
         var risks = new List<string>();
@@ -177,12 +155,14 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
             listing.ItemId,
             listing.Title,
             listing.TrustScore.Value * 10, // UI expects 0-10
+            overallScore,
             $"Analiza za {listing.Title}. Trust: {listing.TrustScore:P0}.",
             isSuspicious,
             listing.Product?.AvgPrice ?? listing.Price,
             listing.Price,
             risks.ToArray(),
             sellerTrust, // Use the freshly calculated seller trust (0.0-1.0)
+            isNewSeller,
             listing.Product?.CategoryName,
             listing.Product?.CanonicalName,
             warranty,
@@ -209,6 +189,61 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
     {
         double avg = values.Average();
         return Math.Sqrt(values.Average(v => Math.Pow(v - avg, 2)));
+    }
+
+    private static double CalculateOverallTrustScore(
+        double listingScore,
+        double sellerScore,
+        Seller? seller,
+        bool? isAnomaly,
+        string? anomalyType)
+    {
+        const double sellerPrior = 6.0;
+        const double sellerPriorStrength = 20.0;
+        double evidence = seller is null ? 0.0 : CalculateSellerEvidenceCount(seller);
+        double weight = evidence / (evidence + sellerPriorStrength);
+        double sellerAdjusted = (weight * sellerScore) + ((1.0 - weight) * sellerPrior);
+        double baseScore = (0.7 * listingScore) + (0.3 * sellerAdjusted);
+        double penalty = CalculateAnomalyPenalty(isAnomaly, anomalyType);
+        return Math.Clamp(baseScore - penalty, 1.0, 10.0);
+    }
+
+    private static double CalculateSellerEvidenceCount(Seller seller)
+    {
+        int positive = Math.Max(0, seller.PositiveFeedback);
+        int neutral = Math.Max(0, seller.NeutralFeedback);
+        int negative = Math.Max(0, seller.NegativeFeedback);
+        int deliveries = Math.Max(0, seller.SuccessfulDeliveries);
+
+        int feedbackCount = Math.Min(positive + neutral + negative, 100);
+        int deliveryCount = Math.Min(deliveries, 50);
+        return feedbackCount + deliveryCount;
+    }
+
+    private static double CalculateAnomalyPenalty(bool? isAnomaly, string? anomalyType)
+    {
+        if (isAnomaly != true)
+        {
+            return 0.0;
+        }
+
+        string normalized = (anomalyType ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalized.Contains("suspicious")
+            || normalized.Contains("too_good")
+            || normalized.Contains("condition_price_mismatch"))
+        {
+            return 2.0;
+        }
+
+        if (normalized.Contains("underpriced")
+            || normalized.Contains("overpriced")
+            || normalized.Contains("price_anomaly")
+            || normalized.Contains("price_deviation"))
+        {
+            return 1.3;
+        }
+
+        return 0.7;
     }
 
     /// <summary>

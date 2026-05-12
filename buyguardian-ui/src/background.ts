@@ -11,6 +11,10 @@
  */
 
 const DEFAULT_API = 'http://localhost:5000';
+const ENRICHMENT_POLL_INTERVAL_MS = 5000;
+const ENRICHMENT_MAX_ATTEMPTS = 30;
+const ANALYSIS_POLL_INTERVAL_MS = 3000;
+const ANALYSIS_MAX_ATTEMPTS = 10;
 
 async function getApiUrl(): Promise<string> {
   return new Promise((resolve) => {
@@ -72,16 +76,61 @@ async function triggerEnrichment(url: string) {
  * On success, cache in chrome.storage.local and notify the tab.
  */
 function startBackgroundPolling(tabId: number, itemId: string) {
-  // Stop any existing poll for this tab
-  const existing = activePolls.get(tabId);
-  if (existing) clearInterval(existing);
+  stopActivePoll(tabId);
+  startEnrichmentPolling(tabId, itemId);
+}
 
+function stopActivePoll(tabId: number) {
+  const existing = activePolls.get(tabId);
+  if (existing) {
+    clearInterval(existing);
+    activePolls.delete(tabId);
+  }
+}
+
+function startEnrichmentPolling(tabId: number, itemId: string) {
   let attempts = 0;
-  const maxAttempts = 10;
 
   const poll = setInterval(async () => {
     attempts++;
-    console.log(`[BG] Poll attempt ${attempts}/${maxAttempts} for item ${itemId}`);
+    console.log(`[BG] Enrichment poll ${attempts}/${ENRICHMENT_MAX_ATTEMPTS} for item ${itemId}`);
+
+    try {
+      const baseUrl = await getApiUrl();
+      const res = await fetch(`${baseUrl}/api/listings/${itemId}/needs-enrichment`);
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.NeedsEnrichment === false) {
+          console.log(`[BG] Enrichment done for ${itemId}. Starting analysis...`);
+          clearInterval(poll);
+          activePolls.delete(tabId);
+          startAnalysisPolling(tabId, itemId);
+          return;
+        }
+      } else {
+        console.warn(`[BG] Enrichment status ${res.status} for ${itemId}`);
+      }
+    } catch (err) {
+      console.warn(`[BG] Enrichment poll failed for ${itemId}:`, err);
+    }
+
+    if (attempts >= ENRICHMENT_MAX_ATTEMPTS) {
+      console.log(`[BG] Enrichment wait timed out for ${itemId}. Stopping.`);
+      clearInterval(poll);
+      activePolls.delete(tabId);
+    }
+  }, ENRICHMENT_POLL_INTERVAL_MS);
+
+  activePolls.set(tabId, poll);
+}
+
+function startAnalysisPolling(tabId: number, itemId: string) {
+  let attempts = 0;
+
+  const poll = setInterval(async () => {
+    attempts++;
+    console.log(`[BG] Analysis poll ${attempts}/${ANALYSIS_MAX_ATTEMPTS} for item ${itemId}`);
 
     try {
       const baseUrl = await getApiUrl();
@@ -133,12 +182,12 @@ function startBackgroundPolling(tabId: number, itemId: string) {
       console.warn(`[BG] Poll failed for ${itemId}:`, err);
     }
 
-    if (attempts >= maxAttempts) {
-      console.log(`[BG] Max poll attempts reached for ${itemId}. Stopping.`);
+    if (attempts >= ANALYSIS_MAX_ATTEMPTS) {
+      console.log(`[BG] Max analysis attempts reached for ${itemId}. Stopping.`);
       clearInterval(poll);
       activePolls.delete(tabId);
     }
-  }, 3000);
+  }, ANALYSIS_POLL_INTERVAL_MS);
 
   activePolls.set(tabId, poll);
 }

@@ -54,11 +54,17 @@ export class App implements OnInit {
 
   showSettings = signal(false);
   settingsApiUrl = signal('');
+  scoreBreakdownOpen = signal(true);
+
+  readonly listingWeight = 0.7;
+  readonly sellerWeight = 0.3;
+  readonly pricePenaltyMax = 2.0;
 
   async ngOnInit(): Promise<void> {
     this.settingsApiUrl.set(await this.service.getConfig());
     this.detectFromCurrentTab();
   }
+
 
   toggleSettings(): void {
     this.showSettings.update(v => !v);
@@ -154,6 +160,37 @@ export class App implements OnInit {
     }
   }
 
+  getDisplayScore(result: AnalysisResult | null): number | null {
+    if (!result) return null;
+    const score = result.overallScore ?? result.trustScore;
+    if (score === null || score === undefined) return null;
+    return score;
+  }
+
+  getSellerScore(result: AnalysisResult | null): number | null {
+    if (!result || result.sellerTrust === null || result.sellerTrust === undefined) return null;
+    return result.sellerTrust * 10;
+  }
+
+  getPriceScore(result: AnalysisResult | null): number | null {
+    if (!result || result.anomalyScore === null || result.anomalyScore === undefined) return null;
+    return result.anomalyScore;
+  }
+
+  getPriceSignalLabel(result: AnalysisResult | null): string {
+    if (!result) return 'N/A';
+    if (result.isAnomaly) {
+      return this.formatAnomalyType(result.anomalyType || 'anomaly');
+    }
+    if (result.anomalyScore !== null && result.anomalyScore !== undefined) return 'Normal';
+    return 'N/A';
+  }
+
+  private formatAnomalyType(type: string): string {
+    const cleaned = type.replace(/^anomaly_/, '').replace(/_/g, ' ');
+    return cleaned.replace(/\b\w/g, (match) => match.toUpperCase());
+  }
+
   getTrustColor(score: number | null): string {
     if (score === null || score === undefined) return 'trust-pending';
     if (score >= 8) return 'trust-high';
@@ -225,5 +262,9 @@ export class App implements OnInit {
     const cleanId = itemId?.toString().replace(/^\/+/, '') ?? '';
     const url = `https://www.olx.ba/artikal/${cleanId}`;
     chrome?.tabs?.create({ url }) ?? window.open(url, '_blank');
+  }
+
+  toggleScoreBreakdown(): void {
+    this.scoreBreakdownOpen.update((value) => !value);
   }
 }
