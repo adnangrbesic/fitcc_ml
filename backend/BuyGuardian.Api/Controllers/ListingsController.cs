@@ -175,30 +175,28 @@ public class ListingsController : ControllerBase
         var targetVector = target.Product.ProductVector;
         var targetProductId = target.ProductId;
 
-        // 2. Find similar products via pgvector (cosine distance < 0.40 → ~60% similarity)
-        //    This is intentionally broader than the 92% dedup threshold (0.08)
-        //    so we pick up related but different products (e.g. iPhone 15 → iPhone 14, Galaxy S24)
-        var similarProducts = await _context.Products
-            .Where(p => p.ProductVector != null && p.Id != targetProductId)
-            .OrderBy(p => p.ProductVector!.CosineDistance(targetVector))
-            .Where(p => p.ProductVector!.CosineDistance(targetVector) < 0.40)
-            .Select(p => p.Id)
-            .Take(30) // Top 30 similar products is sufficient
-            .ToListAsync();
-
-        if (!similarProducts.Any())
-            return Ok(new List<RecommendationDto>());
-
-        // 3. Fetch candidate listings from those products (active, with seller trust)
+        // 2. Fetch candidate listings from the same category within a reasonable price range.
+        // This unlocks cross-brand recommendations (e.g. suggesting a Pixel for an iPhone buyer)
+        // by evaluating specs rather than strict textual/vector similarity.
         const double minSellerTrust = 0.40; // Only recommend trusted sellers
-        var candidates = await _context.Listings
+        var minPrice = (decimal)(targetPrice * 0.60); // Down to -40%
+        var maxPrice = (decimal)(targetPrice * 1.30); // Up to +30%
+
+        var candidatesQuery = _context.Listings
             .Include(l => l.Seller)
             .Include(l => l.Product)
             .Where(l => l.IsActive
                      && l.ItemId != itemId
-                     && similarProducts.Contains(l.ProductId!.Value)
+                     && l.Product != null
+                     && l.Product.CategoryName == target.Product.CategoryName
                      && l.Seller != null
-                     && l.Seller.TrustScore >= minSellerTrust)
+                     && l.Seller.TrustScore >= minSellerTrust
+                     && l.Price >= minPrice
+                     && l.Price <= maxPrice);
+
+        var candidates = await candidatesQuery
+            .OrderByDescending(l => l.Seller!.TrustScore) // Grab the most trusted sellers first
+            .Take(500) // Cap candidates for efficiency
             .Select(l => new
             {
                 l.ItemId,
@@ -209,10 +207,10 @@ public class ListingsController : ControllerBase
                 SellerName = l.Seller.Username,
                 ProductName = l.Product!.CanonicalName,
                 ProductAttrs = l.Product.Attributes,
-                CosineDistance = l.Product.ProductVector!.CosineDistance(targetVector)
+                CosineDistance = l.Product.ProductVector != null && targetVector != null 
+                                 ? l.Product.ProductVector.CosineDistance(targetVector) 
+                                 : 1.0
             })
-            .OrderBy(l => l.CosineDistance)
-            .Take(100) // Cap candidates for efficiency
             .ToListAsync();
 
         if (!candidates.Any())

@@ -16,10 +16,9 @@
       "48": "icons/icon-48.png"
     }
   },
-  "background": {
-    "service_worker": "background.js",
-    "type": "module"
-  },
+    "background": {
+      "service_worker": "background.js"
+    },
   "content_scripts": [
     {
       "matches": ["*://*.olx.ba/*"],
@@ -30,12 +29,13 @@
   "permissions": [
     "activeTab",
     "storage",
-    "tabs"
+    "tabs",
+    "scripting"
   ],
   "host_permissions": [
     "*://*.olx.ba/*",
-    "http://localhost:5000/*",
-    "http://192.168.1.8:5000/*"
+    "http://*:5000/*",
+    "http://localhost:5000/*"
   ],
   "web_accessible_resources": [
     {

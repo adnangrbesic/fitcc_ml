@@ -85,6 +85,15 @@ if (app.Environment.IsDevelopment())
 
 // CORS mora biti PRIJE HttpsRedirection jer redirect ne prenosi CORS headere
 app.UseCors("ExtensionCors");
+
+// Support for Private Network Access (Chrome 104+)
+app.Use((context, next) => {
+    if (context.Request.Headers.ContainsKey("Access-Control-Request-Private-Network")) {
+        context.Response.Headers.Add("Access-Control-Allow-Private-Network", "true");
+    }
+    return next();
+});
+
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<BuyGuardian.Api.Hubs.AnalysisHub>("/hubs/analysis");

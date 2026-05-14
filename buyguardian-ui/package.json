@@ -5,7 +5,7 @@
     "ng": "ng",
     "start": "ng serve",
     "build": "ng build",
-    "build:ext": "ng build --configuration=production && npx tsc src/content.ts --outDir dist/extension/browser --target ES2020 --moduleResolution node --lib ES2020,DOM --skipLibCheck && npx tsc src/background.ts --outDir dist/extension/browser --target ES2020 --moduleResolution node --lib ES2020,DOM --skipLibCheck",
+    "build:ext": "ng build --configuration=production && npx tsc src/content.ts src/background.ts --outDir dist/extension/browser --target es6 --module none --noImplicitAny false --ignoreConfig --types chrome --ignoreDeprecations 6.0",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "serve:ssr:buyguardian-ui": "node dist/buyguardian-ui/server/server.mjs"
@@ -32,12 +32,12 @@
   },
   "devDependencies": {
     "@angular/build": "^21.2.9",
-    "@angular/cli": "^21.2.9",
+    "@angular/cli": "^21.2.11",
     "@angular/compiler-cli": "^21.2.0",
     "@types/chrome": "^0.1.40",
     "@types/express": "^5.0.1",
     "@types/node": "^20.17.19",
     "prettier": "^3.8.1",
-    "typescript": "~5.9.2"
+    "typescript": "^6.0.3"
   }
 }

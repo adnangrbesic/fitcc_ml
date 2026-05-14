@@ -12,7 +12,7 @@ html, body {
   height: 600px;
   overflow: hidden; /* Eliminates the ugly browser frame scrollbar */
   background-color: #f1f4f5;
-  font-family: 'Geomanist', sans-serif !important;
+  font-family: 'Geomanist', 'Outfit', sans-serif !important;
 }
 
 html {
@@ -22,7 +22,10 @@ html {
         primary: mat.$rose-palette,
         tertiary: mat.$red-palette,
       ),
-      typography: 'Geomanist',
+      typography: (
+        plain-family: 'Outfit',
+        brand-family: 'Outfit'
+      ),
       density: 0,
     )
   );

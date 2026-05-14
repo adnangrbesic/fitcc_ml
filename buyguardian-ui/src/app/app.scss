@@ -1,3 +1,5 @@
+@use "sass:color";
+
 :host {
   display: block;
   width: 100%;
@@ -12,7 +14,7 @@
   overflow: hidden; /* Stop dual bars on wrapper itself */
   background: #f2f4f5;
   color: #002f34;
-  font-family: 'Geomanist', sans-serif;
+  font-family: 'Geomanist', 'Outfit', sans-serif;
   display: flex;
   flex-direction: column;
 }
@@ -150,7 +152,7 @@
   font-size: 13px !important;
   box-shadow: none !important;
   &:hover {
-    background-color: darken(#a6cbf3, 5%) !important;
+    background-color: color.adjust(#a6cbf3, $lightness: -5%) !important;
   }
 }
 
@@ -210,7 +212,7 @@
     left: -25%;
     width: 150%;
     height: 100%;
-    background: linear-gradient(160deg, rgba(255,255,255,0.45) 0%, rgba(255,255,255,0.1) 35%, rgba(255,255,255,0) 50%);
+    background: linear-gradient(160deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 50%);
     transform: rotate(-12deg);
     pointer-events: none;
     z-index: 1;
@@ -223,7 +225,7 @@
     right: -15px;
     width: 120px;
     height: 120px;
-    background: radial-gradient(circle, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0) 65%);
+    background: radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 65%);
     border-radius: 50%;
     filter: blur(8px);
     pointer-events: none;
@@ -675,6 +677,12 @@
   color: #d32f2f !important;
   border: 1px solid #ffcccc !important;
   border-radius: 16px !important;
+
+  &.ai-risk {
+    background-color: #fff8e1 !important; /* Soft amber/yellow for AI insights */
+    color: #827717 !important;           /* Olive/dark yellow text */
+    border: 1px solid #ffe082 !important;
+  }
 }
 
 /* ─── Recommendations ─── */
@@ -979,7 +987,7 @@
 
 .advice-item {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   background: rgba(255, 179, 0, 0.08);
   border-left: 3px solid #ffb300;
@@ -994,7 +1002,10 @@
     font-size: 18px;
     width: 18px;
     height: 18px;
-    margin-top: -1px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
 }
 

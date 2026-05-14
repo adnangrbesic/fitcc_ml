@@ -174,7 +174,11 @@ export class App implements OnInit {
 
   getPriceScore(result: AnalysisResult | null): number | null {
     if (!result || result.anomalyScore === null || result.anomalyScore === undefined) return null;
-    return result.anomalyScore;
+    // Map penalty (0 to 2.0, lower is better) to 1-10 scale (higher is better)
+    // Formula: 10 - (penalty * 5) capped between 0 and 10
+    const rawPenalty = result.anomalyScore;
+    const score = 10 - (rawPenalty * 5);
+    return Math.max(0, Math.min(10, score));
   }
 
   getPriceSignalLabel(result: AnalysisResult | null): string {
@@ -252,13 +256,17 @@ export class App implements OnInit {
     if (!res) return [];
     const messages: string[] = [];
 
-    // Anomaly checks
-    if (res.isAnomaly && res.anomalyType) {
-      const type = res.anomalyType.toLowerCase();
-      if (type.includes('too_good') || type.includes('suspiciously_low')) {
+    // Anomaly checks (ML or LLM signals)
+    const isPriceAnomaly = res.isAnomaly || (res.uiAlerts && (res.uiAlerts.includes('Visoka cijena') || res.uiAlerts.includes('Sumnjiva cijena') || res.uiAlerts.includes('Nerealna cijena')));
+    
+    if (isPriceAnomaly) {
+      const type = (res.anomalyType || '').toLowerCase();
+      const alerts = (res.uiAlerts || []).map(a => a.toLowerCase());
+      
+      if (type.includes('too_good') || type.includes('suspiciously_low') || alerts.includes('sumnjiva cijena') || alerts.includes('nerealna cijena')) {
         messages.push('Ovaj artikal ima sumnjivu cijenu, preporučujemo da budete više nego oprezni s njim! Ne savjetujemo kupovinu bez osobnog pregleda.');
         messages.push('Ovaj oglas je previše dobar da bi bio istinit.');
-      } else if (type.includes('overpriced') || type.includes('too_high')) {
+      } else if (type.includes('overpriced') || type.includes('too_high') || alerts.includes('visoka cijena')) {
         messages.push('Ovaj artikal ima previše visoku cijenu, nastavite gledati dalje na stranici.');
       } else {
         messages.push('Ovaj artikal ima sumnjivu cijenu, preporučujemo da budete više nego oprezni s njim! Ne savjetujemo kupovinu bez osobnog pregleda.');

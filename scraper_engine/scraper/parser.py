@@ -199,7 +199,7 @@ class Parser:
             user = ad.get("user") or ad.get("seller") or {}
             if isinstance(user, dict):
                 result["seller_id"] = str(user.get("id", ""))
-                result["seller_name"] = user.get("name") or user.get("login")
+                result["seller_name"] = user.get("name") or user.get("username") or user.get("login")
                 
                 # Feedback counts (Dojmovi)
                 result["positive_feedback"] = user.get("positive_reviews") or user.get("positiveReviews") or 0
@@ -515,11 +515,18 @@ class Parser:
         if month_match:
             return int(month_match.group(1))
             
-        # 3. Check for dates (e.g. "2015-04-10")
+        # 3. Check for dates (e.g. "2015-04-10" or "17.06.2016")
         date_match = re.search(r"(\d{4})[-.](\d{2})", text)
         if date_match:
             from datetime import datetime
             y, m = int(date_match.group(1)), int(date_match.group(2))
+            now = datetime.now()
+            return (now.year - y) * 12 + (now.month - m)
+            
+        eu_date_match = re.search(r"(\d{1,2})\.(\d{1,2})\.(\d{4})", text)
+        if eu_date_match:
+            from datetime import datetime
+            m, y = int(eu_date_match.group(2)), int(eu_date_match.group(3))
             now = datetime.now()
             return (now.year - y) * 12 + (now.month - m)
             

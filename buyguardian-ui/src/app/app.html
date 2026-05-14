@@ -99,19 +99,6 @@
           </mat-card-content>
         </mat-card>
  
-        <!-- UI ALERTS (AI DETECTED FLAWS) -->
-        @if (res.uiAlerts && res.uiAlerts.length > 0) {
-          <div class="ui-alerts-container">
-            <mat-chip-set>
-              @for (alert of res.uiAlerts; track alert) {
-                <mat-chip class="ui-alert-chip">
-                  <mat-icon matChipAvatar>info_outline</mat-icon>
-                  {{ alert }}
-                </mat-chip>
-              }
-            </mat-chip-set>
-          </div>
-        }
 
         <!-- SCORE BREAKDOWN -->
         <section class="score-breakdown">
@@ -151,7 +138,7 @@
                 } @else {
                   <span class="score-value">—</span>
                 }
-                <span class="score-sub">Penalty 0-{{ pricePenaltyMax | number:'1.0-0' }} (lower is better)</span>
+                <span class="score-sub">Scale 1-10 (higher is better)</span>
                 <span class="score-sub">Signal: {{ getPriceSignalLabel(res) }}</span>
               </div>
             </div>
@@ -260,16 +247,24 @@
         </section>
 
         <!-- RISKS -->
-        @if (res.risks?.length) {
+        @if (res.risks?.length || res.uiAlerts?.length) {
           <section class="risks-section">
             <h3 class="section-title warn-title">
               <mat-icon>warning_amber</mat-icon> Rizici
             </h3>
             <mat-chip-set class="risk-list">
+              <!-- Hardcoded logic risks -->
               @for (risk of res.risks; track risk) {
                 <mat-chip highlighted color="warn" class="risk-chip" [matTooltip]="getRiskExplanation(risk)">
                   <mat-icon matChipAvatar style="font-size:16px; width:16px; height:16px; margin-left:4px;">info</mat-icon>
                   {{ getRiskLabel(risk) }}
+                </mat-chip>
+              }
+              <!-- AI detected alerts merged here -->
+              @for (alert of res.uiAlerts; track alert) {
+                <mat-chip highlighted color="warn" class="risk-chip ai-risk">
+                  <mat-icon matChipAvatar style="font-size:16px; width:16px; height:16px; margin-left:4px;">psychology</mat-icon>
+                  {{ alert }}
                 </mat-chip>
               }
             </mat-chip-set>
