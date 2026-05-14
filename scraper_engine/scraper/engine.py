@@ -428,9 +428,24 @@ class ScraperEngine:
                 # We use properties (a.href) for absolute URLs and attributes for relative ones, then resolve.
                 page_urls = await page.evaluate(
                     """() => {
-                        return Array.from(document.querySelectorAll('a[href*="/artikal/"]'))
+                        // Priority 1: Target the organic listing grid (excludes most site-wide ads)
+                        let container = document.querySelector('div[data-testid="ad-list"], .css-13l5v98, .ad-list');
+                        
+                        // Fallback: If specific grid not found, use body but filter out obvious ad sidebars
+                        if (!container) container = document.body;
+
+                        return Array.from(container.querySelectorAll('a[href*="/artikal/"]'))
                             .map(a => a.href)
-                            .filter(h => h.includes('/artikal/'));
+                            .filter(h => {
+                                // Basic cleanup and validation
+                                if (!h.includes('/artikal/')) return false;
+                                
+                                // Exclude obvious external/ad links if any
+                                try {
+                                    const url = new URL(h);
+                                    return url.hostname.includes('olx.ba');
+                                } catch(e) { return false; }
+                            });
                     }"""
                 )
                 

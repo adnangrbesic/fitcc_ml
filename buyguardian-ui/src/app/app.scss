@@ -243,6 +243,26 @@
   }
 }
 
+/* ─── UI Alerts (AI Insights) ─── */
+.ui-alerts-container {
+  padding: 4px 0;
+  margin-bottom: 4px;
+}
+
+.ui-alert-chip {
+  background-color: #e0f2f1 !important; /* Soft teal/mint background */
+  color: #004d40 !important;           /* Dark teal text */
+  border: 1px solid #b2dfdb !important;
+  font-weight: 700 !important;
+  font-size: 12px !important;
+  min-height: 28px !important;
+  
+  mat-icon {
+    color: #004d40 !important;
+    font-size: 18px;
+  }
+}
+
 .trust-spinner {
   display: inline-block;
   vertical-align: middle;
@@ -933,5 +953,59 @@
 
 @keyframes popIn {
   0% { transform: scale(0.95); opacity: 0; }
-  100% { transform: scale(1); opacity: 1; }
+100% { transform: scale(1); opacity: 1; }
+}
+
+/* ─── Advice Section ─── */
+.advice-section {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+  border: 1px solid #e6ebed;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.advice-title {
+  color: #ffb300 !important;
+  mat-icon { color: #ffb300 !important; }
+}
+
+.advice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.advice-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: rgba(255, 179, 0, 0.08);
+  border-left: 3px solid #ffb300;
+  padding: 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #002f34;
+
+  .advice-icon {
+    color: #ffb300;
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    margin-top: -1px;
+  }
+}
+
+/* ─── Disclaimer ─── */
+.disclaimer-text {
+  font-size: 11px;
+  font-weight: 500;
+  color: #708a8e;
+  text-align: center;
+  padding: 16px;
+  margin-top: 16px;
+  border-top: 1px solid #e6ebed;
+  line-height: 1.4;
 }

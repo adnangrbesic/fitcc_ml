@@ -2,7 +2,9 @@
   "title": {
     "short": "Unknown",
     "long": "Unknown",
-    "score": 0.0
+    "score": 0.0,
+    "canonical_name": "Unknown",
+    "canonical_confidence": 0.0
   },
   "category": "Unknown",
   "attributes": {},
@@ -14,6 +16,7 @@
     "writing_quality": 0.0,
     "overall_listing_trust": 0.0
   },
+  "ui_alerts": [],
   "context_reasoning": {
     "condition": "",
     "overpay_ratio": "",

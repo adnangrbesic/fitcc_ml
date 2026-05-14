@@ -248,6 +248,45 @@ export class App implements OnInit {
     }
   }
 
+  getAdviceMessages(res: AnalysisResult | null): string[] {
+    if (!res) return [];
+    const messages: string[] = [];
+
+    // Anomaly checks
+    if (res.isAnomaly && res.anomalyType) {
+      const type = res.anomalyType.toLowerCase();
+      if (type.includes('too_good') || type.includes('suspiciously_low')) {
+        messages.push('Ovaj artikal ima sumnjivu cijenu, preporučujemo da budete više nego oprezni s njim! Ne savjetujemo kupovinu bez osobnog pregleda.');
+        messages.push('Ovaj oglas je previše dobar da bi bio istinit.');
+      } else if (type.includes('overpriced') || type.includes('too_high')) {
+        messages.push('Ovaj artikal ima previše visoku cijenu, nastavite gledati dalje na stranici.');
+      } else {
+        messages.push('Ovaj artikal ima sumnjivu cijenu, preporučujemo da budete više nego oprezni s njim! Ne savjetujemo kupovinu bez osobnog pregleda.');
+      }
+    }
+
+    // Seller checks
+    if (res.sellerTrust !== null && res.sellerTrust < 0.5) {
+      messages.push('Ovaj prodavač nije baš pouzdan, najbolje bi bilo da potražite drugog.');
+    }
+    if (res.isNewSeller) {
+      messages.push('Ovaj prodavač je tek nedavno došao na platformu, savjetujemo oprez!');
+    }
+
+    // Low trust score check
+    const score = this.getDisplayScore(res);
+    if (score !== null && score < 5) {
+      let issues = '';
+      if (res.risks && res.risks.length > 0) {
+        issues = ' Glavni problemi: ' + res.risks.map(r => this.getRiskLabel(r)).join(', ') + '.';
+      }
+      messages.push('Ovaj oglas ima nizak indeks povjerenja.' + issues);
+    }
+
+    return messages;
+  }
+
+
   getRecTypeColor(type: string): string {
     switch (type) {
       case 'price_peer': return '#42a5f5';

@@ -71,6 +71,35 @@ public class MlService : IMlService
         }
     }
 
+    public async Task<List<AnomalyResult>?> GetAnomalyScoreBatchAsync(Guid productId)
+    {
+        try
+        {
+            var content = new StringContent(
+                JsonSerializer.Serialize(new { product_id = productId.ToString() }),
+                Encoding.UTF8,
+                "application/json");
+
+            var response = await _httpClient.PostAsync("/api/anomaly/batch", content);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "ML service returned {StatusCode} for batch product {ProductId}",
+                    response.StatusCode, productId);
+                return null;
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            return JsonSerializer.Deserialize<List<AnomalyResult>>(json, JsonOpts);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error calling batch ML service for product {ProductId}", productId);
+            return null;
+        }
+    }
+
     public async Task<TrustScoreResult?> GetTrustScoreAsync(Listing listing, bool retrain = true)
     {
         try

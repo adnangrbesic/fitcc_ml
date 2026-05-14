@@ -98,6 +98,20 @@
             </div>
           </mat-card-content>
         </mat-card>
+ 
+        <!-- UI ALERTS (AI DETECTED FLAWS) -->
+        @if (res.uiAlerts && res.uiAlerts.length > 0) {
+          <div class="ui-alerts-container">
+            <mat-chip-set>
+              @for (alert of res.uiAlerts; track alert) {
+                <mat-chip class="ui-alert-chip">
+                  <mat-icon matChipAvatar>info_outline</mat-icon>
+                  {{ alert }}
+                </mat-chip>
+              }
+            </mat-chip-set>
+          </div>
+        }
 
         <!-- SCORE BREAKDOWN -->
         <section class="score-breakdown">
@@ -307,6 +321,28 @@
           </section>
         }
 
+        <!-- ADVICE MESSAGES -->
+        @if (getAdviceMessages(res).length > 0) {
+          <section class="advice-section">
+            <h3 class="section-title advice-title">
+              <mat-icon>lightbulb</mat-icon> Savjeti Guardiana
+            </h3>
+            <div class="advice-list">
+              @for (msg of getAdviceMessages(res); track msg) {
+                <div class="advice-item">
+                  <mat-icon class="advice-icon">info</mat-icon>
+                  <span>{{ msg }}</span>
+                </div>
+              }
+            </div>
+          </section>
+        }
+
+      </div>
+      
+      <!-- DISCLAIMER -->
+      <div class="disclaimer-text">
+        Buyguardian može praviti greške, uvijek savjetujemo na osobnu provjeru artikala. Vi ste sebi svoj najveći Guardian!
       </div>
       }
     }

@@ -53,6 +53,10 @@ def evaluate_rules(listing: Listing, features: FeatureSet) -> RuleOutcome:
         reasons.append("Missing critical specs")
         penalty += 20.0
 
+    if not listing.description or len(listing.description.strip()) < 15:
+        reasons.append("Empty or very short description")
+        penalty += 15.0
+
     hard_fail = max_score is not None and max_score <= 20.0
     return RuleOutcome(
         hard_fail=hard_fail,

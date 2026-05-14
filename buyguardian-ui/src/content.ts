@@ -102,7 +102,7 @@ function injectFloatingBadge(data: any) {
       border: 1px solid ${color}40;
       border-radius: 50px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.05);
-      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: 'Geomanist', -apple-system, BlinkMacSystemFont, sans-serif;
       cursor: pointer;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       animation: buyguardian-slide-in 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;

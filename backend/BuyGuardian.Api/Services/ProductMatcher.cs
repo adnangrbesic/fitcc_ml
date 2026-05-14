@@ -29,28 +29,50 @@ public class ProductMatcher : IProductMatcher
     public async Task<Guid?> MatchProductAsync(BuyGuardianContext db, string canonicalName, double confidence)
     {
         if (string.IsNullOrWhiteSpace(canonicalName)) return null;
+        
+        // 0. LLM Confidence Check (The "Learning" System)
+        if (confidence < 0.80)
+        {
+            _logger.LogWarning("Low LLM confidence ({Confidence}) for: {Canonical}. Pushing to review queue.", confidence, canonicalName);
+            await PushToReviewQueue(canonicalName, new List<string> { "Low LLM Confidence" });
+            return null; // Force manual review, do not match automatically
+        }
 
         // 1. pgvector cosine (95% hit)
         _logger.LogInformation("Attempting pgvector match for: {Canonical}", canonicalName);
         var embedding = await _embeddingService.GetEmbeddingAsync(canonicalName);
         
-        var pgMatch = await db.Products
+        var pgCandidates = await db.Products
             .OrderBy(p => p.ProductVector!.CosineDistance(embedding))
             .Where(p => p.ProductVector!.CosineDistance(embedding) < 0.08) // 92% similarity
-            .FirstOrDefaultAsync();
+            .Select(p => new { p.Id, p.CanonicalName })
+            .Take(5)
+            .ToListAsync();
 
-        if (pgMatch != null)
+        foreach (var cand in pgCandidates)
         {
-            _logger.LogInformation("pgvector match found: {Match}", pgMatch.CanonicalName);
-            return pgMatch.Id;
+            if (IsLogicalMatch(canonicalName, cand.CanonicalName))
+            {
+                _logger.LogInformation("pgvector verified logical match found: {Match}", cand.CanonicalName);
+                return cand.Id;
+            }
         }
 
         // 2. Fuzzy fallback (4% hit)
         _logger.LogInformation("pgvector failed. Attempting fuzzy match for: {Canonical}", canonicalName);
         var allProducts = await db.Products.Select(p => new { p.Id, p.CanonicalName }).ToListAsync();
         
+        string canonicalLower = canonicalName.ToLowerInvariant();
+
         var fuzzyMatch = allProducts
-            .Select(p => new { p.Id, Distance = ComputeLevenshteinDistance(canonicalName.ToLower(), p.CanonicalName.ToLower()) })
+            .Select(p => {
+                bool isLogical = IsLogicalMatch(canonicalName, p.CanonicalName);
+                
+                return new { 
+                    p.Id, 
+                    Distance = isLogical ? ComputeLevenshteinDistance(canonicalLower, p.CanonicalName.ToLowerInvariant()) : 999 
+                };
+            })
             .Where(x => x.Distance < 3)
             .OrderBy(x => x.Distance)
             .FirstOrDefault();
@@ -62,7 +84,7 @@ public class ProductMatcher : IProductMatcher
         }
 
         // 3. Human Review (similarity 0.85-0.92)
-        var closestDist = allProducts.Any() ? allProducts.Min(p => ComputeLevenshteinDistance(canonicalName.ToLower(), p.CanonicalName.ToLower())) : 99;
+        var closestDist = allProducts.Any() ? allProducts.Min(p => ComputeLevenshteinDistance(canonicalName.ToLowerInvariant(), p.CanonicalName.ToLowerInvariant())) : 99;
         
         if (closestDist < 10) // Arbitrary threshold for "almost" match
         {
@@ -70,6 +92,34 @@ public class ProductMatcher : IProductMatcher
         }
 
         return null;
+    }
+
+    private static bool IsLogicalMatch(string canonical, string candidate)
+    {
+        if (string.IsNullOrWhiteSpace(canonical) || string.IsNullOrWhiteSpace(candidate)) return false;
+        
+        string a = canonical.ToLowerInvariant();
+        string b = candidate.ToLowerInvariant();
+
+        // 1. Strict Number Sequence Match
+        var aNumbers = System.Text.RegularExpressions.Regex.Matches(a, @"\d+").Select(m => m.Value).OrderBy(n => n).ToList();
+        var bNumbers = System.Text.RegularExpressions.Regex.Matches(b, @"\d+").Select(m => m.Value).OrderBy(n => n).ToList();
+        
+        if (!aNumbers.SequenceEqual(bNumbers))
+            return false; // Block if number sequences differ (e.g., 128 != 256, or A16 != A37)
+
+        // 2. Critical Model Suffix Checks
+        var criticalSuffixes = new[] { "plus", "pro", "max", "ultra", "mini", "lite", "neo", "active", "fe" };
+        foreach (var suffix in criticalSuffixes)
+        {
+            bool hasA = System.Text.RegularExpressions.Regex.IsMatch(a, $@"\b{suffix}\b");
+            bool hasB = System.Text.RegularExpressions.Regex.IsMatch(b, $@"\b{suffix}\b");
+            
+            if (hasA != hasB)
+                return false; // One string has the special model suffix, the other doesn't!
+        }
+
+        return true;
     }
 
     private async Task PushToReviewQueue(string canonical, List<string> candidates)

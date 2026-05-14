@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Observable, throwError, of } from 'rxjs';
 import { catchError, timeout } from 'rxjs/operators';
+import * as signalR from '@microsoft/signalr';
 
 export interface AnalysisResult {
   trustScore: number;
@@ -29,6 +30,7 @@ export interface AnalysisResult {
   cheapestPrice?: number;
   cheapestTitle?: string;
   cheapestSellerName?: string;
+  uiAlerts?: string[];
 }
 
 export interface Recommendation {
@@ -107,12 +109,56 @@ export class BuyGuardianService {
         .pipe(
           timeout(15000),
           catchError((err: HttpErrorResponse) => {
+            if (err.status === 404) {
+              // Not found (processing), connect to SignalR
+              this.waitForSignalR(baseUrl, itemId, resolve, reject);
+              return of(null as any); // prevent further error propagation
+            }
             const parsedErr = this.parseError(err);
             reject(parsedErr);
             return throwError(() => parsedErr);
           })
-        ).subscribe(resolve);
+        ).subscribe(result => {
+          if (result) resolve(result); // result is null if we went down the SignalR path
+        });
     });
+  }
+
+  private async waitForSignalR(baseUrl: string, itemId: string, resolve: Function, reject: Function) {
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl(`${baseUrl}/hubs/analysis`)
+      .withAutomaticReconnect()
+      .build();
+
+    connection.on('AnalysisComplete', async (id: string) => {
+      if (id === itemId) {
+        // Stop connection as we got our result
+        await connection.stop();
+        // Retry the HTTP request now that it's ready
+        this.http.post<AnalysisResult>(`${baseUrl}/api/analyze/${itemId}`, {})
+          .subscribe({
+             next: res => resolve(res),
+             error: err => reject(this.parseError(err))
+          });
+      }
+    });
+
+    try {
+      await connection.start();
+      // Join the group
+      await connection.invoke('JoinGroup', itemId);
+      
+      // Set a timeout just in case it hangs forever
+      setTimeout(async () => {
+        if (connection.state === signalR.HubConnectionState.Connected) {
+          await connection.stop();
+          reject({ message: 'Procesiranje traje predugo. Pokušajte ponovo kasnije.', offline: false });
+        }
+      }, 60000); // 1 minute timeout for ML scraping
+    } catch (err) {
+      console.error("SignalR connection error: ", err);
+      reject({ message: 'Nije moguće uspostaviti real-time konekciju sa serverom.', offline: false });
+    }
   }
 
   async getRecommendations(itemId: string): Promise<Recommendation[]> {

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import re
 
 from dataclasses import dataclass
 from typing import Any
@@ -26,10 +27,14 @@ def _to_float(value: Any) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
     if isinstance(value, str):
-        try:
-            return float(value.replace(",", "."))
-        except ValueError:
-            return None
+        # Extract first number from string (e.g., "512 GB" -> 512.0)
+        match = re.search(r"(\d+(?:[.,]\d+)?)", value)
+        if match:
+            try:
+                num_str = match.group(1).replace(",", ".")
+                return float(num_str)
+            except ValueError:
+                return None
     return None
 
 
@@ -60,6 +65,29 @@ def extract_features(listing: Listing) -> FeatureSet:
     attributes = _get_dict(raw.get("attributes"))
     raw_specs = _get_dict(raw.get("raw_specs"))
 
+    # Flexible attribute extraction
+    ram_keys = ["ram_gb", "ram", "RAM", "Radna memorija"]
+    storage_keys = ["storage_gb", "storage", "Interna memorija", "Memorija", "Kapacitet", "Kapacitet memorije"]
+    battery_keys = ["battery_health_percent", "battery_health", "Zdravlje baterije (%)", "Baterija"]
+
+    ram_val = None
+    for k in ram_keys:
+        if attributes.get(k) is not None:
+            ram_val = attributes.get(k)
+            break
+
+    storage_val = None
+    for k in storage_keys:
+        if attributes.get(k) is not None:
+            storage_val = attributes.get(k)
+            break
+
+    battery_val = None
+    for k in battery_keys:
+        if attributes.get(k) is not None:
+            battery_val = attributes.get(k)
+            break
+
     numeric = {
         "condition": _to_float(context.get("condition")),
         "overpay_ratio": _to_float(context.get("overpay_ratio")),
@@ -67,9 +95,9 @@ def extract_features(listing: Listing) -> FeatureSet:
         "writing_quality": _to_float(context.get("writing_quality")),
         "title_score": _to_float(title_meta.get("score")),
         "canonical_confidence": _to_float(title_meta.get("canonical_confidence")),
-        "ram_gb": _to_float(attributes.get("ram_gb")),
-        "storage_gb": _to_float(attributes.get("storage_gb")),
-        "battery_health_percent": _to_float(attributes.get("battery_health_percent")),
+        "ram_gb": _to_float(ram_val),
+        "storage_gb": _to_float(storage_val),
+        "battery_health_percent": _to_float(battery_val),
     }
 
     boolean = {

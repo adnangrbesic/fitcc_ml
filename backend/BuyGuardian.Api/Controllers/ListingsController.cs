@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using BuyGuardian.Api.Data;
 using BuyGuardian.Api.Models;
 using BuyGuardian.Api.Models.Requests;
+using BuyGuardian.Api.Features;
 using Pgvector;
 using Pgvector.EntityFrameworkCore;
 
@@ -14,11 +16,15 @@ public class ListingsController : ControllerBase
 {
     private readonly BuyGuardianContext _context;
     private readonly ILogger<ListingsController> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IServiceScopeFactory _scopeFactory;
 
-    public ListingsController(BuyGuardianContext context, ILogger<ListingsController> logger)
+    public ListingsController(BuyGuardianContext context, ILogger<ListingsController> logger, IHttpClientFactory httpClientFactory, IServiceScopeFactory scopeFactory)
     {
         _context = context;
         _logger = logger;
+        _httpClientFactory = httpClientFactory;
+        _scopeFactory = scopeFactory;
     }
 
     [HttpGet]
@@ -55,10 +61,52 @@ public class ListingsController : ControllerBase
 
         foreach (var kv in request.Score)
         {
-            _context.Listings.Where(l => l.Id.ToString() == kv.Key).ExecuteUpdate(l => l.SetProperty(x => x.TrustScore, kv.Value));
+            await _context.Listings.Where(l => l.Id.ToString() == kv.Key).ExecuteUpdateAsync(l => l.SetProperty(x => x.TrustScore, kv.Value));
         }
 
         return Ok();
+    }
+
+    [HttpPost("recompute-all")]
+    public IActionResult RecomputeAll()
+    {
+        // Fire and forget background recomputation
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<BuyGuardianContext>();
+                var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+                
+                var itemIds = await db.Listings
+                    .Where(l => l.TrustScore == null)
+                    .Select(l => l.ItemId)
+                    .ToListAsync();
+
+                _logger.LogInformation("Background recomputation started for {Count} listings", itemIds.Count);
+
+                foreach (var itemId in itemIds)
+                {
+                    try
+                    {
+                        await mediator.Send(new AnalyzeListingQuery(itemId));
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to recompute score for {ItemId}", itemId);
+                    }
+                }
+                
+                _logger.LogInformation("Background recomputation finished");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogCritical(ex, "Critical failure in background recomputation task");
+            }
+        });
+
+        return Accepted(new { message = "Recomputation started in background" });
     }
 
     [HttpGet("{id}")]
@@ -175,32 +223,39 @@ public class ListingsController : ControllerBase
         int targetRam = ExtractIntAttr(target.Product.Attributes, "ram_gb");
 
         var recommendations = new List<RecommendationDto>();
+        var client = _httpClientFactory.CreateClient();
+        client.Timeout = TimeSpan.FromSeconds(1.5); // 1.5s limit for real-time check
 
         // ── Price Peer: within ±5% of target price ──────────────────────
-        var pricePeer = candidates
+        var pricePeerCandidates = candidates
             .Where(c => Math.Abs((double)c.Price - targetPrice) / targetPrice <= 0.05)
             .OrderBy(c => c.CosineDistance)
             .ThenByDescending(c => c.SellerTrust)
-            .FirstOrDefault();
+            .Take(3)
+            .ToList();
 
-        if (pricePeer != null)
+        foreach (var c in pricePeerCandidates)
         {
-            var diff = ((double)pricePeer.Price - targetPrice) / targetPrice * 100;
-            recommendations.Add(new RecommendationDto(
-                pricePeer.ItemId,
-                pricePeer.Title,
-                pricePeer.Price,
-                pricePeer.SellerTrust,
-                pricePeer.SellerName,
-                pricePeer.ProductName,
-                "price_peer",
-                $"Slična cijena ({diff:+0.0;-0.0}%)",
-                "Oglas u istom cjenovnom rangu sa pouzdanim prodavačem."
-            ));
+            if (await IsListingLiveAsync(c.ItemId, client))
+            {
+                var diff = ((double)c.Price - targetPrice) / targetPrice * 100;
+                recommendations.Add(new RecommendationDto(
+                    c.ItemId,
+                    c.Title,
+                    c.Price,
+                    c.SellerTrust,
+                    c.SellerName,
+                    c.ProductName,
+                    "price_peer",
+                    $"Slična cijena ({diff:+0.0;-0.0}%)",
+                    "Oglas u istom cjenovnom rangu sa pouzdanim prodavačem."
+                ));
+                break;
+            }
         }
 
         // ── Value Upgrade: +5% to +25%, better specs ────────────────────
-        var upgrade = candidates
+        var upgradeCandidates = candidates
             .Where(c =>
             {
                 var priceDiff = ((double)c.Price - targetPrice) / targetPrice;
@@ -234,33 +289,38 @@ public class ListingsController : ControllerBase
                 return specGain - pricePenalty; // Higher is better
             })
             .ThenByDescending(c => c.SellerTrust)
-            .FirstOrDefault();
+            .Take(3)
+            .ToList();
 
-        if (upgrade != null)
+        foreach (var c in upgradeCandidates)
         {
-            var diff = ((double)upgrade.Price - targetPrice) / targetPrice * 100;
-            int uStorage = ExtractIntAttr(upgrade.ProductAttrs, "storage_gb");
-            int uRam = ExtractIntAttr(upgrade.ProductAttrs, "ram_gb");
-            var specDetails = new List<string>();
-            if (uStorage > targetStorage && targetStorage > 0) specDetails.Add($"{uStorage}GB memorije");
-            if (uRam > targetRam && targetRam > 0) specDetails.Add($"{uRam}GB RAM-a");
-            var specText = specDetails.Any() ? string.Join(", ", specDetails) : "bolje karakteristike";
+            if (await IsListingLiveAsync(c.ItemId, client))
+            {
+                var diff = ((double)c.Price - targetPrice) / targetPrice * 100;
+                int uStorage = ExtractIntAttr(c.ProductAttrs, "storage_gb");
+                int uRam = ExtractIntAttr(c.ProductAttrs, "ram_gb");
+                var specDetails = new List<string>();
+                if (uStorage > targetStorage && targetStorage > 0) specDetails.Add($"{uStorage}GB memorije");
+                if (uRam > targetRam && targetRam > 0) specDetails.Add($"{uRam}GB RAM-a");
+                var specText = specDetails.Any() ? string.Join(", ", specDetails) : "bolje karakteristike";
 
-            recommendations.Add(new RecommendationDto(
-                upgrade.ItemId,
-                upgrade.Title,
-                upgrade.Price,
-                upgrade.SellerTrust,
-                upgrade.SellerName,
-                upgrade.ProductName,
-                "value_upgrade",
-                $"Bolje karakteristike (+{diff:0.0}%)",
-                $"Ima {specText} za samo {diff:0.0}% višu cijenu."
-            ));
+                recommendations.Add(new RecommendationDto(
+                    c.ItemId,
+                    c.Title,
+                    c.Price,
+                    c.SellerTrust,
+                    c.SellerName,
+                    c.ProductName,
+                    "value_upgrade",
+                    $"Bolje karakteristike (+{diff:0.0}%)",
+                    $"Ima {specText} za samo {diff:0.0}% višu cijenu."
+                ));
+                break;
+            }
         }
 
         // ── Budget Saver: -10% to -30% cheaper ─────────────────────────
-        var budget = candidates
+        var budgetCandidates = candidates
             .Where(c =>
             {
                 var priceDiff = (targetPrice - (double)c.Price) / targetPrice;
@@ -268,25 +328,45 @@ public class ListingsController : ControllerBase
             })
             .OrderByDescending(c => c.SellerTrust) // Prioritize most trusted
             .ThenBy(c => c.CosineDistance) // Then most similar product
-            .FirstOrDefault();
+            .Take(3)
+            .ToList();
 
-        if (budget != null)
+        foreach (var c in budgetCandidates)
         {
-            var savings = (targetPrice - (double)budget.Price) / targetPrice * 100;
-            recommendations.Add(new RecommendationDto(
-                budget.ItemId,
-                budget.Title,
-                budget.Price,
-                budget.SellerTrust,
-                budget.SellerName,
-                budget.ProductName,
-                "budget_saver",
-                $"Uštedi {savings:0.0}%",
-                $"Sličan proizvod za {savings:0.0}% nižu cijenu sa pouzdanim prodavačem."
-            ));
+            if (await IsListingLiveAsync(c.ItemId, client))
+            {
+                var savings = (targetPrice - (double)c.Price) / targetPrice * 100;
+                recommendations.Add(new RecommendationDto(
+                    c.ItemId,
+                    c.Title,
+                    c.Price,
+                    c.SellerTrust,
+                    c.SellerName,
+                    c.ProductName,
+                    "budget_saver",
+                    $"Uštedi {savings:0.0}%",
+                    $"Sličan proizvod za {savings:0.0}% nižu cijenu sa pouzdanim prodavačem."
+                ));
+                break;
+            }
         }
 
         return Ok(recommendations);
+    }
+
+    private async Task<bool> IsListingLiveAsync(string itemId, HttpClient client)
+    {
+        if (string.IsNullOrWhiteSpace(itemId)) return false;
+        try
+        {
+            string cleanId = itemId.ToString().TrimStart('/');
+            var response = await client.GetAsync($"https://www.olx.ba/artikal/{cleanId}", HttpCompletionOption.ResponseHeadersRead);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <summary>Extract an integer attribute from product JSONB attributes.</summary>

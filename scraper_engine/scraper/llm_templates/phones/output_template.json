@@ -2,7 +2,9 @@
   "title": {
     "short": "Unknown",
     "long": "Unknown",
-    "score": 0.0
+    "score": 0.0,
+    "canonical_name": "Unknown",
+    "canonical_confidence": 0.0
   },
   "category": "Mobile Phones",
   "attributes": {

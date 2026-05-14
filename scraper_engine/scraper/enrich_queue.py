@@ -22,7 +22,7 @@ RAW_QUEUE = "olx:raw_listings"
 BATCH_WINDOW = 1
 LLM_BATCH_TIMEOUT = 10.0  # seconds to wait before processing a partial batch
 
-async def process_batch(batch: List[Dict[str, Any]], enricher, publisher: RabbitMqPublisher, redis_client):
+async def process_batch(batch: List[Dict[str, Any]], enrichers: Dict[str, Any], publisher: RabbitMqPublisher, redis_client):
     if not batch:
         return
 
@@ -30,9 +30,16 @@ async def process_batch(batch: List[Dict[str, Any]], enricher, publisher: Rabbit
     
     tasks = []
     for raw_data in batch:
-        # Convert raw data to ListingData model
         try:
             listing = ListingData(**raw_data)
+            
+            # Select enricher based on category
+            breadcrumbs = (listing.breadcrumbs or "").lower()
+            if "mobiteli" in breadcrumbs or "phone" in breadcrumbs:
+                enricher = enrichers.get("phones", enrichers["general"])
+            else:
+                enricher = enrichers["general"]
+                
             tasks.append(enricher.enrich_listing(listing))
         except Exception as e:
             logger.error(f"Failed to parse raw listing: {e}")
@@ -68,8 +75,11 @@ async def main():
     publisher = RabbitMqPublisher()
     publisher.connect()
     
-    # Initialize LLM Enricher with universal template
-    enricher = build_enricher(category="general")
+    # Initialize LLM Enrichers
+    enrichers = {
+        "general": build_enricher(category="general"),
+        "phones": build_enricher(category="phones")
+    }
     
     logger.info(f"Enrichment worker started. Watching {RAW_QUEUE}...")
     
@@ -94,7 +104,7 @@ async def main():
                 # Filter batch to only include dicts
                 valid_batch = [item for item in batch if isinstance(item, dict)]
                 if valid_batch:
-                    await process_batch(valid_batch, enricher, publisher, redis)
+                    await process_batch(valid_batch, enrichers, publisher, redis)
                 batch = []
                 last_batch_time = time.time()
                 

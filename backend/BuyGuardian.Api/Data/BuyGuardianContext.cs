@@ -41,7 +41,7 @@ public class BuyGuardianContext : DbContext
 
         modelBuilder.Entity<Product>(entity =>
         {
-            entity.HasIndex(e => e.CanonicalName);
+            entity.HasIndex(e => new { e.CanonicalName, e.CategoryId }).IsUnique();
             entity.Property(e => e.Attributes).HasColumnType("jsonb");
             entity.Property(e => e.ProductVector).HasColumnType("vector(768)");
             entity.HasIndex(e => e.CategoryName);

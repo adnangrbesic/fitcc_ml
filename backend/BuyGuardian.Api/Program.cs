@@ -21,6 +21,7 @@ builder.Services.AddControllers()
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddSignalR();
 
 // Database
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -86,6 +87,7 @@ if (app.Environment.IsDevelopment())
 app.UseCors("ExtensionCors");
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<BuyGuardian.Api.Hubs.AnalysisHub>("/hubs/analysis");
 
 using (var scope = app.Services.CreateScope())
 {

@@ -20,6 +20,11 @@ public interface IMlService
     Task<TrustScoreResult?> GetTrustScoreAsync(Listing listing, bool retrain = true);
 
     /// <summary>
+    /// Score all active listings for a product in one batch.
+    /// </summary>
+    Task<List<AnomalyResult>?> GetAnomalyScoreBatchAsync(Guid productId);
+
+    /// <summary>
     /// Trigger model retraining for a specific product group.
     /// Fire-and-forget; failures are logged but not propagated.
     /// </summary>

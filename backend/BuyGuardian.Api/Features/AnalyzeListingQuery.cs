@@ -33,5 +33,6 @@ public record ListingAnalysisResult(
     string? CheapestItemId,
     decimal? CheapestPrice,
     string? CheapestTitle,
-    string? CheapestSellerName
+    string? CheapestSellerName,
+    string[] UiAlerts
 );

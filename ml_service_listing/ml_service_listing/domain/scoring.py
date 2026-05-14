@@ -46,7 +46,7 @@ def _seller_score(listing: Listing) -> float:
             return normalize_0_100(float(overall) * 10.0)
         except (TypeError, ValueError):
             pass
-    return 60.0
+    return 75.0
 
 
 def _consistency_score(features: FeatureSet) -> float:
@@ -75,29 +75,33 @@ def _condition_score(listing: Listing, features: FeatureSet) -> float:
 def _pricing_score(features: FeatureSet) -> float:
     ratio = features.numeric.get("overpay_ratio")
     if ratio is None:
-        return 60.0
-    if ratio < -0.6:
-        return 10.0
-    if ratio < -0.3:
-        return 40.0
-    if ratio < -0.1:
-        return 70.0
-    if ratio <= 0.2:
-        return 90.0
-    if ratio <= 0.5:
         return 75.0
+    if ratio < -0.7:
+        return 20.0
+    if ratio < -0.5:
+        return 50.0
+    if ratio < -0.3:
+        return 85.0
+    if ratio < -0.1:
+        return 95.0
+    if ratio <= 0.2:
+        return 95.0
+    if ratio <= 0.5:
+        return 80.0
     if ratio <= 1.0:
-        return 55.0
-    return 35.0
+        return 60.0
+    return 40.0
 
 
 def _writing_score(listing: Listing, features: FeatureSet) -> float:
     writing_quality = features.numeric.get("writing_quality")
-    if writing_quality is not None:
+    if writing_quality is not None and writing_quality > 0:
         return normalize_0_100(writing_quality * 10.0)
-    if listing.description:
-        if len(listing.description) > 200:
-            return 80.0
-        if len(listing.description) > 80:
-            return 60.0
-    return 50.0
+    
+    if not listing.description or len(listing.description.strip()) < 15:
+        return 10.0
+    if len(listing.description) > 200:
+        return 80.0
+    if len(listing.description) > 80:
+        return 60.0
+    return 30.0

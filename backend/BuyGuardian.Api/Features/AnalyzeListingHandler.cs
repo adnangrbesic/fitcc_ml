@@ -104,6 +104,20 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
             if (ctxElem.TryGetProperty("warranty_months", out var wElem) && wElem.TryGetInt32(out var w))
                 warranty = w;
         }
+
+        // --- EXTRACT UI ALERTS ---
+        var uiAlerts = new List<string>();
+        if (listing.RawMetadata.TryGetValue("ui_alerts", out var alertsObj) && alertsObj is JsonElement alertsElem && alertsElem.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in alertsElem.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.String)
+                {
+                    uiAlerts.Add(item.GetString()!);
+                }
+            }
+        }
+        // -------------------------
         // Locate exact same product group price minimum for end user reality check
         // Fetch top 5 logical candidates to run a live verification check on
         var candidates = new List<dynamic>();
@@ -177,7 +191,8 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
             verifiedCheapest?.ItemId,
             verifiedCheapest?.Price,
             verifiedCheapest?.Title,
-            verifiedCheapest?.SellerName
+            verifiedCheapest?.SellerName,
+            uiAlerts.ToArray()
         );
 
         await _cache.SetAsync(cacheKey, result, TimeSpan.FromHours(1));
@@ -198,12 +213,15 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
         bool? isAnomaly,
         string? anomalyType)
     {
-        const double sellerPrior = 6.0;
-        const double sellerPriorStrength = 20.0;
+        const double sellerPrior = 7.0;
+        const double sellerPriorStrength = 15.0; // Slightly more responsive to new feedback
         double evidence = seller is null ? 0.0 : CalculateSellerEvidenceCount(seller);
         double weight = evidence / (evidence + sellerPriorStrength);
         double sellerAdjusted = (weight * sellerScore) + ((1.0 - weight) * sellerPrior);
-        double baseScore = (0.7 * listingScore) + (0.3 * sellerAdjusted);
+        
+        // 60% Listing, 40% Seller for better balance
+        double baseScore = (0.6 * listingScore) + (0.4 * sellerAdjusted);
+        
         double penalty = CalculateAnomalyPenalty(isAnomaly, anomalyType);
         return Math.Clamp(baseScore - penalty, 1.0, 10.0);
     }

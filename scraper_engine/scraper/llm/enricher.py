@@ -22,10 +22,12 @@ logger = logging.getLogger(__name__)
 _DEFAULT_SYSTEM_PROMPT = (
     "You are a strict JSON data extraction engine. "
     "You MUST return ONLY a single valid JSON object. "
+    "You MUST include ALL properties defined in the output template, without omitting any fields (such as 'canonical_confidence'). "
     "Do NOT include any preamble, introduction, or explanations. "
     "Ensure all property names and string values are enclosed in double quotes. "
     "Do NOT use single quotes for JSON. "
-    "Follow the output schema exactly."
+    "Follow the output schema and format exactly."
+    "DO NOT ADD STUFF YOU DONT GATHER BY THE SCRAPPER/ LISTING. ONLY ASSUME STUFF LISTED IS TRUE AND FOR VALIDATION PURPOSES ONLY USE STUFF THAT YOU GET ELSEWHERE."
 )
 
 
@@ -131,12 +133,15 @@ class ListingEnricher:
             except Exception as exc:  # noqa: BLE001
                 last_error = str(exc)
                 last_latency_ms = int((perf_counter() - started) * 1000)
+                # Check if raw_response variable exists and log it for debugging
+                raw_resp_str = raw_response if 'raw_response' in locals() else "N/A"
                 logger.warning(
-                    "LLM enrichment failed for item %s (attempt %d/%d): %s",
+                    "LLM enrichment failed for item %s (attempt %d/%d): %s. Raw response: %s",
                     listing.item_id,
                     attempt,
                     max_attempts,
                     exc,
+                    raw_resp_str
                 )
 
         listing.llm_enrichment = None
