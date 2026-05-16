@@ -22,7 +22,7 @@
   "content_scripts": [
     {
       "matches": ["*://*.olx.ba/*"],
-      "js": ["content.js"],
+      "js": ["shared/score-labels.js", "content.js"],
       "run_at": "document_idle"
     }
   ],

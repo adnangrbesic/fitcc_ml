@@ -209,55 +209,23 @@ export class App implements OnInit {
   }
 
   getSellerScore(result: AnalysisResult | null): number | null {
-    if (!result || result.sellerTrust === null || result.sellerTrust === undefined) return null;
-    return result.sellerTrust * 10;
+    return this.service.getSellerScore(result);
   }
 
   getPriceScore(result: AnalysisResult | null): number | null {
-    if (!result || result.anomalyScore === null || result.anomalyScore === undefined) return null;
-    
-    // If it's a confirmed anomaly, it should never have a perfect 10/10 score
-    if (result.isAnomaly) {
-      const rawPenalty = Math.max(0.5, result.anomalyScore); // Force at least 0.5 penalty if anomaly is flagged
-      const score = 10 - (rawPenalty * 5);
-      return Math.max(0, Math.min(8, score)); // Cap at 8 if it's an anomaly but score is somehow high
-    }
-
-    const rawPenalty = result.anomalyScore;
-    const score = 10 - (rawPenalty * 5);
-    return Math.max(0, Math.min(10, score));
+    return this.service.getPriceScore(result);
   }
 
   getPriceSignalLabel(result: AnalysisResult | null): string {
-    if (!result) return 'N/A';
-    if (result.isAnomaly) {
-      return this.formatAnomalyType(result.anomalyType || 'anomaly');
-    }
-    if (result.anomalyScore !== null && result.anomalyScore !== undefined) return 'Normal';
-    return 'N/A';
-  }
-
-  private formatAnomalyType(type: string): string {
-    const cleaned = type.replace(/^anomaly_/, '').replace(/_/g, ' ');
-    return cleaned.replace(/\b\w/g, (match) => match.toUpperCase());
+    return this.service.getPriceSignalLabel(result);
   }
 
   getTrustColor(score: number | null, isSuspicious?: boolean): string {
-    if (isSuspicious) return 'trust-low'; // Force red if suspicious
-    if (score === null || score === undefined) return 'trust-pending';
-    if (score >= 9) return 'trust-safe';
-    if (score >= 7) return 'trust-high';
-    if (score >= 5.1) return 'trust-medium';
-    return 'trust-low';
+    return this.service.getTrustColorClass(score, isSuspicious);
   }
 
-  getTrustLabel(score: number | null, isSuspicious?: boolean): string {
-    if (isSuspicious) return 'Prevara'; // Force 'Prevara' if suspicious
-    if (score === null || score === undefined) return 'Računanje...';
-    if (score >= 9) return 'Sigurno';
-    if (score >= 7) return 'Visoki trust';
-    if (score >= 5.1) return 'Srednji trust';
-    return 'Prevara';
+  getOverallScoreLabel(result: AnalysisResult | null): string {
+    return this.service.getOverallScoreLabel(result);
   }
 
   getRiskLabel(risk: string): string {

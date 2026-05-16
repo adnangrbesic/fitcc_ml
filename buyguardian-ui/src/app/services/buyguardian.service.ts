@@ -3,6 +3,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Observable, throwError, of } from 'rxjs';
 import { catchError, timeout } from 'rxjs/operators';
 import * as signalR from '@microsoft/signalr';
+import '../../shared/score-labels';
 
 export interface AnalysisResult {
   trustScore: number;
@@ -87,6 +88,21 @@ const RISK_EXPLANATIONS: Record<string, string> = {
   listing_staleness: 'Oglas predugo stoji bez izmjena dok tržište diktira druge uslove.',
   price_volatility: 'Izražene varijacije cijene unutar samog artikla u bazi podataka.',
 };
+
+interface ScoreParts {
+  listing: number | null;
+  seller: number | null;
+  price: number | null;
+}
+
+interface ScoreLabelApi {
+  getOverallScoreLabel: (scores: ScoreParts, isSuspicious?: boolean) => string;
+  getTrustColorClass: (score: number | null | undefined, isSuspicious?: boolean) => string;
+}
+
+function getScoreLabelApi(): ScoreLabelApi | null {
+  return (globalThis as any).BuyGuardianScoreLabels ?? null;
+}
 
 @Injectable({ providedIn: 'root' })
 export class BuyGuardianService {
@@ -271,6 +287,61 @@ export class BuyGuardianService {
     });
   }
 
+  getListingScore(result: AnalysisResult | null): number | null {
+    if (!result || result.trustScore === null || result.trustScore === undefined) return null;
+    return result.trustScore;
+  }
+
+  getSellerScore(result: AnalysisResult | null): number | null {
+    if (!result || result.sellerTrust === null || result.sellerTrust === undefined) return null;
+    return result.sellerTrust * 10;
+  }
+
+  getPriceScore(result: AnalysisResult | null): number | null {
+    if (!result || result.anomalyScore === null || result.anomalyScore === undefined) return null;
+
+    if (result.isAnomaly) {
+      const rawPenalty = Math.max(0.5, result.anomalyScore);
+      const score = 10 - (rawPenalty * 5);
+      return Math.max(0, Math.min(8, score));
+    }
+
+    const rawPenalty = result.anomalyScore;
+    const score = 10 - (rawPenalty * 5);
+    return Math.max(0, Math.min(10, score));
+  }
+
+  getScoreParts(result: AnalysisResult | null): ScoreParts {
+    return {
+      listing: this.getListingScore(result),
+      seller: this.getSellerScore(result),
+      price: this.getPriceScore(result),
+    };
+  }
+
+  getOverallScoreLabel(result: AnalysisResult | null): string {
+    const labels = getScoreLabelApi();
+    if (!labels) return '';
+
+    const scores = result ? this.getScoreParts(result) : { listing: null, seller: null, price: null };
+    return labels.getOverallScoreLabel(scores, result?.isSuspicious);
+  }
+
+  getTrustColorClass(score: number | null, isSuspicious?: boolean): string {
+    const labels = getScoreLabelApi();
+    if (!labels) return 'trust-pending';
+    return labels.getTrustColorClass(score, isSuspicious);
+  }
+
+  getPriceSignalLabel(result: AnalysisResult | null): string {
+    if (!result) return 'N/A';
+    if (result.isAnomaly) {
+      return this.formatAnomalyType(result.anomalyType || 'anomaly');
+    }
+    if (result.anomalyScore !== null && result.anomalyScore !== undefined) return 'Normal';
+    return 'N/A';
+  }
+
   getRiskLabel(risk: string): string {
     // Defensive cleanup of accidental stacked prefixes: "anomaly_anomaly_something" -> "something"
     if (risk.includes('anomaly_')) {
@@ -304,6 +375,11 @@ export class BuyGuardianService {
       return RISK_EXPLANATIONS[type] ?? 'ML model je detektovao odstupanje od standardnih obrazaca trgovine.';
     }
     return RISK_EXPLANATIONS[risk] ?? 'Dodatni faktor rizika uočen tokom automatske inspekcije oglasa.';
+  }
+
+  private formatAnomalyType(type: string): string {
+    const cleaned = type.replace(/^anomaly_/, '').replace(/_/g, ' ');
+    return cleaned.replace(/\b\w/g, (match) => match.toUpperCase());
   }
 
 }

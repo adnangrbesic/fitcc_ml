@@ -12,6 +12,21 @@ function extractItemId(): string | null {
   return null;
 }
 
+interface ScoreParts {
+  listing: number | null;
+  seller: number | null;
+  price: number | null;
+}
+
+interface ScoreLabelApi {
+  getOverallScoreLabel: (scores: ScoreParts, isSuspicious?: boolean) => string;
+  getTrustColorHex: (score: number | null | undefined, isSuspicious?: boolean) => string;
+}
+
+function getScoreLabelApi(): ScoreLabelApi | null {
+  return (globalThis as any).BuyGuardianScoreLabels ?? null;
+}
+
 // ── Floating Badge Injection (Ultra-Premium Glass UI) ─────────────────────
 
 async function injectFloatingBadge(data: any) {
@@ -29,8 +44,9 @@ async function injectFloatingBadge(data: any) {
     });
   });
 
-  // Calculate Price Score (duplicated logic from app.ts)
+  // Calculate Price Score (mirrors popup scoring logic)
   let priceScore = 0;
+  let priceScoreForLabel: number | null = null;
   if (data.anomalyScore !== null && data.anomalyScore !== undefined) {
     if (data.isAnomaly) {
       const rawPenalty = Math.max(0.5, data.anomalyScore);
@@ -38,13 +54,20 @@ async function injectFloatingBadge(data: any) {
     } else {
       priceScore = Math.max(0, Math.min(10, 10 - (data.anomalyScore * 5)));
     }
+    priceScoreForLabel = priceScore;
   }
 
   // Calculate Seller Score
   const sellerScore = (data.sellerTrust ?? 0) * 10;
+  const sellerScoreForLabel = data.sellerTrust === null || data.sellerTrust === undefined
+    ? null
+    : data.sellerTrust * 10;
   
   // Calculate Listing Score
   const listingScore = data.trustScore ?? 0;
+  const listingScoreForLabel = data.trustScore === null || data.trustScore === undefined
+    ? null
+    : data.trustScore;
 
   // Final Weighted Score
   const totalWeight = weights.listing + weights.seller + weights.price;
@@ -54,24 +77,18 @@ async function injectFloatingBadge(data: any) {
 
   const isSuspicious = data.isSuspicious === true;
 
-  let color = '#42a5f5'; 
-  let label = 'Trusted';
-  if (isSuspicious) {
-    color = '#ff1744';
-    label = 'Prevara';
-  } else if (trustScore >= 9) {
-    color = '#2e7d32'; // Meadow Green
-    label = 'Sigurno';
-  } else if (trustScore >= 7) {
-    color = '#66bb6a'; // Lighter Green
-    label = 'Visoki trust';
-  } else if (trustScore >= 5.1) {
-    color = '#ffab40';
-    label = 'Srednji trust';
-  } else {
-    color = '#ff1744';
-    label = 'Prevara';
-  }
+  const labelApi = getScoreLabelApi();
+  const color = labelApi ? labelApi.getTrustColorHex(trustScore, isSuspicious) : '#42a5f5';
+  const label = labelApi
+    ? labelApi.getOverallScoreLabel(
+        {
+          listing: listingScoreForLabel,
+          seller: sellerScoreForLabel,
+          price: priceScoreForLabel,
+        },
+        isSuspicious
+      )
+    : '';
 
   const badge = document.createElement('div');
   badge.id = 'buyguardian-badge';

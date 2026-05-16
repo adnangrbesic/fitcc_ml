@@ -58,6 +58,11 @@
   .detected-icon {
     color: #00e676;
     font-size: 18px;
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
   }
 
   .settings-btn {

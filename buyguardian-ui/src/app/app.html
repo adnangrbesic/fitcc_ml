@@ -31,11 +31,11 @@
         </mat-form-field>
 
         <div class="weight-settings">
-          <h4 class="settings-subtitle">Prilagodi Trust Score</h4>
+          <h4 class="settings-subtitle">Prilagodi ocjenu povjerenja</h4>
           
           <div class="weight-control">
             <div class="weight-info">
-              <span class="weight-name">Listing</span>
+              <span class="weight-name">Oglas</span>
               <span class="weight-val">{{ customListingWeight }}%</span>
             </div>
             <mat-slider min="0" max="100" step="1" discrete class="weight-slider">
@@ -45,7 +45,7 @@
 
           <div class="weight-control">
             <div class="weight-info">
-              <span class="weight-name">Seller</span>
+              <span class="weight-name">Prodavač</span>
               <span class="weight-val">{{ customSellerWeight }}%</span>
             </div>
             <mat-slider min="0" max="100" step="1" discrete class="weight-slider">
@@ -55,7 +55,7 @@
 
           <div class="weight-control">
             <div class="weight-info">
-              <span class="weight-name">Price</span>
+              <span class="weight-name">Cijena</span>
               <span class="weight-val">{{ customPriceWeight }}%</span>
             </div>
             <mat-slider min="0" max="100" step="1" discrete class="weight-slider">
@@ -133,7 +133,7 @@
               <div class="trust-info">
                 <div class="trust-label">
                   @if (getDisplayScore(res) !== null && getDisplayScore(res) !== undefined) {
-                    {{ getTrustLabel(getDisplayScore(res), res.isSuspicious) }}
+                    {{ getOverallScoreLabel(res) }}
                   } @else {
                     Analiza detalja...
                   }
@@ -154,41 +154,41 @@
         <section class="score-breakdown">
           <div class="score-header">
             <h3 class="section-title">
-              <mat-icon>analytics</mat-icon> Score breakdown
+              <mat-icon>analytics</mat-icon> Razrada ocjene
             </h3>
-            <button class="score-toggle" (click)="toggleScoreBreakdown()" aria-label="Toggle score breakdown">
+            <button class="score-toggle" (click)="toggleScoreBreakdown()" aria-label="Prikaži ili sakrij razradu ocjene">
               <mat-icon>{{ scoreBreakdownOpen() ? 'expand_less' : 'expand_more' }}</mat-icon>
             </button>
           </div>
           @if (scoreBreakdownOpen()) {
             <div class="score-grid">
               <div class="score-item">
-                <span class="score-label">Listing</span>
+                <span class="score-label">Oglas</span>
                 @if (res.trustScore !== null && res.trustScore !== undefined) {
                   <span class="score-value">{{ res.trustScore | number:'1.1-1' }}</span>
-                  <span class="score-sub">Weight {{ customListingWeight }}% · Max 10</span>
+                  <span class="score-sub">Ponder {{ customListingWeight }}% · Maks 10</span>
                 } @else {
                   <span class="score-value">—</span>
                 }
               </div>
               <div class="score-item">
-                <span class="score-label">Seller</span>
+                <span class="score-label">Prodavač</span>
                 @if (getSellerScore(res) !== null && getSellerScore(res) !== undefined) {
                   <span class="score-value">{{ getSellerScore(res) | number:'1.1-1' }}</span>
-                  <span class="score-sub">Weight {{ customSellerWeight }}% · Max 10</span>
-                  <span class="score-sub">Raw {{ res.sellerTrust * 100 | number:'1.0-0' }}%</span>
+                  <span class="score-sub">Ponder {{ customSellerWeight }}% · Maks 10</span>
+                  <span class="score-sub">Sirovo {{ res.sellerTrust * 100 | number:'1.0-0' }}%</span>
                 } @else {
                   <span class="score-value">—</span>
                 }
               </div>
               <div class="score-item">
-                <span class="score-label">Price</span>
+                <span class="score-label">Cijena</span>
                 @if (getPriceScore(res) !== null && getPriceScore(res) !== undefined) {
                   <span class="score-value">{{ getPriceScore(res) | number:'1.1-1' }}</span>
                 } @else {
                   <span class="score-value">—</span>
                 }
-                <span class="score-sub">Weight {{ customPriceWeight }}% · Max 10</span>
+                <span class="score-sub">Ponder {{ customPriceWeight }}% · Maks 10</span>
                 <span class="score-sub">Signal: {{ getPriceSignalLabel(res) }}</span>
               </div>
             </div>
