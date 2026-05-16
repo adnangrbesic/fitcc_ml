@@ -30,9 +30,59 @@
           <mat-hint>npr. http://192.168.1.x:5000</mat-hint>
         </mat-form-field>
 
-        <button mat-raised-button color="primary" (click)="saveSettings()" class="save-btn">
-          SPASI PODEŠAVANJA
-        </button>
+        <div class="weight-settings">
+          <h4 class="settings-subtitle">Prilagodi Trust Score</h4>
+          
+          <div class="weight-control">
+            <div class="weight-info">
+              <span class="weight-name">Listing</span>
+              <span class="weight-val">{{ customListingWeight }}%</span>
+            </div>
+            <mat-slider min="0" max="100" step="1" discrete class="weight-slider">
+              <input matSliderThumb [(ngModel)]="customListingWeight">
+            </mat-slider>
+          </div>
+
+          <div class="weight-control">
+            <div class="weight-info">
+              <span class="weight-name">Seller</span>
+              <span class="weight-val">{{ customSellerWeight }}%</span>
+            </div>
+            <mat-slider min="0" max="100" step="1" discrete class="weight-slider">
+              <input matSliderThumb [(ngModel)]="customSellerWeight">
+            </mat-slider>
+          </div>
+
+          <div class="weight-control">
+            <div class="weight-info">
+              <span class="weight-name">Price</span>
+              <span class="weight-val">{{ customPriceWeight }}%</span>
+            </div>
+            <mat-slider min="0" max="100" step="1" discrete class="weight-slider">
+              <input matSliderThumb [(ngModel)]="customPriceWeight">
+            </mat-slider>
+          </div>
+
+          <div class="weight-summary">
+            <span class="weight-total-lbl">Ukupni ponder:</span>
+            <span class="weight-total-val" [class.warn]="customListingWeight + customSellerWeight + customPriceWeight !== 100">
+              {{ customListingWeight + customSellerWeight + customPriceWeight }}%
+            </span>
+          </div>
+        </div>
+
+        <div class="settings-actions">
+          <button mat-button color="warn" (click)="revertToDefaultWeights()" class="revert-btn">
+            <mat-icon>history</mat-icon> RESETUJ TEŽINE
+          </button>
+          <button mat-raised-button color="primary" 
+                  (click)="saveSettings()" 
+                  class="save-btn"
+                  [disabled]="customListingWeight + customSellerWeight + customPriceWeight !== 100"
+                  [matTooltip]="customListingWeight + customSellerWeight + customPriceWeight !== 100 ? 'Ukupni ponder mora biti tačno 100%' : ''">
+            SPASI PODEŠAVANJA
+          </button>
+        </div>
       </div>
     } @else {
 
@@ -68,7 +118,7 @@
         <div class="results">
 
         <!-- TRUST SCORE -->
-        <mat-card class="trust-card" [ngClass]="getTrustColor(getDisplayScore(res))">
+        <mat-card class="trust-card" [ngClass]="getTrustColor(getDisplayScore(res), res.isSuspicious)">
           <div class="trust-specular"></div>
           <mat-card-content class="trust-layout">
             <div class="trust-grid">
@@ -83,7 +133,7 @@
               <div class="trust-info">
                 <div class="trust-label">
                   @if (getDisplayScore(res) !== null && getDisplayScore(res) !== undefined) {
-                    {{ getTrustLabel(getDisplayScore(res)) }}
+                    {{ getTrustLabel(getDisplayScore(res), res.isSuspicious) }}
                   } @else {
                     Analiza detalja...
                   }
@@ -116,7 +166,7 @@
                 <span class="score-label">Listing</span>
                 @if (res.trustScore !== null && res.trustScore !== undefined) {
                   <span class="score-value">{{ res.trustScore | number:'1.1-1' }}</span>
-                  <span class="score-sub">Weight {{ listingWeight * 100 | number:'1.0-0' }}% · Max 10</span>
+                  <span class="score-sub">Weight {{ customListingWeight }}% · Max 10</span>
                 } @else {
                   <span class="score-value">—</span>
                 }
@@ -125,7 +175,7 @@
                 <span class="score-label">Seller</span>
                 @if (getSellerScore(res) !== null && getSellerScore(res) !== undefined) {
                   <span class="score-value">{{ getSellerScore(res) | number:'1.1-1' }}</span>
-                  <span class="score-sub">Weight {{ sellerWeight * 100 | number:'1.0-0' }}% · Max 10</span>
+                  <span class="score-sub">Weight {{ customSellerWeight }}% · Max 10</span>
                   <span class="score-sub">Raw {{ res.sellerTrust * 100 | number:'1.0-0' }}%</span>
                 } @else {
                   <span class="score-value">—</span>
@@ -134,14 +184,17 @@
               <div class="score-item">
                 <span class="score-label">Price</span>
                 @if (getPriceScore(res) !== null && getPriceScore(res) !== undefined) {
-                  <span class="score-value">{{ getPriceScore(res) | number:'1.2-2' }}</span>
+                  <span class="score-value">{{ getPriceScore(res) | number:'1.1-1' }}</span>
                 } @else {
                   <span class="score-value">—</span>
                 }
-                <span class="score-sub">Scale 1-10 (higher is better)</span>
+                <span class="score-sub">Weight {{ customPriceWeight }}% · Max 10</span>
                 <span class="score-sub">Signal: {{ getPriceSignalLabel(res) }}</span>
               </div>
             </div>
+            <button mat-button class="edit-weights-btn" (click)="toggleSettings()">
+              <mat-icon>tune</mat-icon> PRILAGODI TEŽINE
+            </button>
           }
         </section>
 

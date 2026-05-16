@@ -15,6 +15,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatSliderModule } from '@angular/material/slider';
 
 import { BuyGuardianService, AnalysisResult, AnalysisError, Recommendation } from './services/buyguardian.service';
 
@@ -36,6 +37,7 @@ import { BuyGuardianService, AnalysisResult, AnalysisError, Recommendation } fro
     MatDividerModule,
     MatIconModule,
     MatTooltipModule,
+    MatSliderModule,
   ],
   templateUrl: './app.html',
   styleUrl: './app.scss',
@@ -60,8 +62,17 @@ export class App implements OnInit {
   readonly sellerWeight = 0.3;
   readonly pricePenaltyMax = 2.0;
 
+  customListingWeight = 40;
+  customSellerWeight = 30;
+  customPriceWeight = 30;
+
   async ngOnInit(): Promise<void> {
     this.settingsApiUrl.set(await this.service.getConfig());
+    const weights = await this.service.getWeights();
+    this.customListingWeight = weights.listing;
+    this.customSellerWeight = weights.seller;
+    this.customPriceWeight = weights.price;
+    
     this.detectFromCurrentTab();
   }
 
@@ -72,10 +83,28 @@ export class App implements OnInit {
 
   async saveSettings(): Promise<void> {
     await this.service.saveConfig(this.settingsApiUrl());
+    await this.service.saveWeights(
+      this.customListingWeight,
+      this.customSellerWeight,
+      this.customPriceWeight
+    );
     this.showSettings.set(false);
     // Reload if on item
     if (this.itemId()) {
       this.analyze();
+    }
+  }
+
+  async revertToDefaultWeights(): Promise<void> {
+    const defaults = { listing: 40, seller: 30, price: 30 };
+    this.customListingWeight = defaults.listing;
+    this.customSellerWeight = defaults.seller;
+    this.customPriceWeight = defaults.price;
+    await this.service.saveWeights(defaults.listing, defaults.seller, defaults.price);
+    
+    // Reload if on item to update display score
+    if (this.itemId()) {
+      this.analyzeQuietly();
     }
   }
 
@@ -162,9 +191,21 @@ export class App implements OnInit {
 
   getDisplayScore(result: AnalysisResult | null): number | null {
     if (!result) return null;
-    const score = result.overallScore ?? result.trustScore;
-    if (score === null || score === undefined) return null;
-    return score;
+    
+    // Calculate custom score
+    const lScore = result.trustScore ?? 0;
+    const sScore = this.getSellerScore(result) ?? 0;
+    const pScore = this.getPriceScore(result) ?? 0;
+    
+    const wL = this.customListingWeight;
+    const wS = this.customSellerWeight;
+    const wP = this.customPriceWeight;
+    
+    const totalWeight = wL + wS + wP;
+    if (totalWeight === 0) return 0;
+    
+    const customScore = (lScore * wL + sScore * wS + pScore * wP) / totalWeight;
+    return customScore;
   }
 
   getSellerScore(result: AnalysisResult | null): number | null {
@@ -174,8 +215,14 @@ export class App implements OnInit {
 
   getPriceScore(result: AnalysisResult | null): number | null {
     if (!result || result.anomalyScore === null || result.anomalyScore === undefined) return null;
-    // Map penalty (0 to 2.0, lower is better) to 1-10 scale (higher is better)
-    // Formula: 10 - (penalty * 5) capped between 0 and 10
+    
+    // If it's a confirmed anomaly, it should never have a perfect 10/10 score
+    if (result.isAnomaly) {
+      const rawPenalty = Math.max(0.5, result.anomalyScore); // Force at least 0.5 penalty if anomaly is flagged
+      const score = 10 - (rawPenalty * 5);
+      return Math.max(0, Math.min(8, score)); // Cap at 8 if it's an anomaly but score is somehow high
+    }
+
     const rawPenalty = result.anomalyScore;
     const score = 10 - (rawPenalty * 5);
     return Math.max(0, Math.min(10, score));
@@ -195,18 +242,22 @@ export class App implements OnInit {
     return cleaned.replace(/\b\w/g, (match) => match.toUpperCase());
   }
 
-  getTrustColor(score: number | null): string {
+  getTrustColor(score: number | null, isSuspicious?: boolean): string {
+    if (isSuspicious) return 'trust-low'; // Force red if suspicious
     if (score === null || score === undefined) return 'trust-pending';
-    if (score >= 8) return 'trust-high';
-    if (score >= 5) return 'trust-medium';
+    if (score >= 9) return 'trust-safe';
+    if (score >= 7) return 'trust-high';
+    if (score >= 5.1) return 'trust-medium';
     return 'trust-low';
   }
 
-  getTrustLabel(score: number | null): string {
+  getTrustLabel(score: number | null, isSuspicious?: boolean): string {
+    if (isSuspicious) return 'Prevara'; // Force 'Prevara' if suspicious
     if (score === null || score === undefined) return 'Računanje...';
-    if (score >= 8) return 'Visok trust';
-    if (score >= 5) return 'Srednji trust';
-    return 'Nizak trust';
+    if (score >= 9) return 'Sigurno';
+    if (score >= 7) return 'Visoki trust';
+    if (score >= 5.1) return 'Srednji trust';
+    return 'Prevara';
   }
 
   getRiskLabel(risk: string): string {

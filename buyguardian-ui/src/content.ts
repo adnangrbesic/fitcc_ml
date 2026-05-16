@@ -14,27 +14,63 @@ function extractItemId(): string | null {
 
 // ── Floating Badge Injection (Ultra-Premium Glass UI) ─────────────────────
 
-function injectFloatingBadge(data: any) {
+async function injectFloatingBadge(data: any) {
   const existing = document.getElementById('buyguardian-badge');
   if (existing) existing.remove();
 
-  const trustScore = data.overallScore ?? data.trustScore ?? 0;
+  // Load custom weights from storage
+  const weights: any = await new Promise((resolve) => {
+    chrome.storage.local.get(['weight_listing', 'weight_seller', 'weight_price'], (res) => {
+      resolve({
+        listing: res['weight_listing'] ?? 40,
+        seller: res['weight_seller'] ?? 30,
+        price: res['weight_price'] ?? 30
+      });
+    });
+  });
+
+  // Calculate Price Score (duplicated logic from app.ts)
+  let priceScore = 0;
+  if (data.anomalyScore !== null && data.anomalyScore !== undefined) {
+    if (data.isAnomaly) {
+      const rawPenalty = Math.max(0.5, data.anomalyScore);
+      priceScore = Math.max(0, Math.min(8, 10 - (rawPenalty * 5)));
+    } else {
+      priceScore = Math.max(0, Math.min(10, 10 - (data.anomalyScore * 5)));
+    }
+  }
+
+  // Calculate Seller Score
+  const sellerScore = (data.sellerTrust ?? 0) * 10;
+  
+  // Calculate Listing Score
+  const listingScore = data.trustScore ?? 0;
+
+  // Final Weighted Score
+  const totalWeight = weights.listing + weights.seller + weights.price;
+  const trustScore = totalWeight > 0 
+    ? (listingScore * weights.listing + sellerScore * weights.seller + priceScore * weights.price) / totalWeight
+    : 0;
+
   const isSuspicious = data.isSuspicious === true;
 
   let color = '#42a5f5'; 
   let label = 'Trusted';
   if (isSuspicious) {
     color = '#ff1744';
-    label = 'Sumnjiv oglas';
-  } else if (trustScore >= 8) {
-    color = '#00c853';
-    label = 'Pouzdan';
-  } else if (trustScore >= 5) {
+    label = 'Prevara';
+  } else if (trustScore >= 9) {
+    color = '#2e7d32'; // Meadow Green
+    label = 'Sigurno';
+  } else if (trustScore >= 7) {
+    color = '#66bb6a'; // Lighter Green
+    label = 'Visoki trust';
+  } else if (trustScore >= 5.1) {
     color = '#ffab40';
     label = 'Srednji trust';
   } else {
     color = '#ff1744';
-    label = 'Nizak trust';
+    label = 'Prevara';
   }
 
   const badge = document.createElement('div');

@@ -31,6 +31,7 @@ export interface AnalysisResult {
   cheapestTitle?: string;
   cheapestSellerName?: string;
   uiAlerts?: string[];
+  isSuspicious?: boolean;
 }
 
 export interface Recommendation {
@@ -184,6 +185,35 @@ export class BuyGuardianService {
 
   getConfig(): Promise<string> {
     return this.getBaseUrl();
+  }
+
+  saveWeights(listing: number, seller: number, price: number): Promise<void> {
+    return new Promise((resolve) => {
+      if (chrome?.storage?.local) {
+        chrome.storage.local.set({ 
+          'weight_listing': listing,
+          'weight_seller': seller,
+          'weight_price': price
+        }, () => resolve());
+      } else {
+        resolve();
+      }
+    });
+  }
+
+  getWeights(): Promise<{listing: number, seller: number, price: number}> {
+    return new Promise((resolve) => {
+      const defaults = { listing: 40, seller: 30, price: 30 };
+      if (!chrome?.storage?.local) return resolve(defaults);
+      
+      chrome.storage.local.get(['weight_listing', 'weight_seller', 'weight_price'], (res: Record<string, any>) => {
+        resolve({
+          listing: res['weight_listing'] ?? defaults.listing,
+          seller: res['weight_seller'] ?? defaults.seller,
+          price: res['weight_price'] ?? defaults.price
+        });
+      });
+    });
   }
 
   private parseError(error: HttpErrorResponse): AnalysisError {
