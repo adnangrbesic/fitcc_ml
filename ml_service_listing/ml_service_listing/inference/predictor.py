@@ -48,19 +48,32 @@ class TrustScorePredictor:
 
 
 def compute_confidence(features: FeatureSet) -> float:
-    fields = [
-        features.numeric.get("condition"),
-        features.numeric.get("overpay_ratio"),
-        features.numeric.get("warranty_months"),
-        features.numeric.get("writing_quality"),
-        features.numeric.get("title_score"),
-        features.numeric.get("canonical_confidence"),
-        features.numeric.get("ram_gb"),
-        features.numeric.get("storage_gb"),
+    """Compute confidence based on data completeness AND source reliability.
+
+    Different features have different reliability:
+      - Scraped data (condition, warranty, RAM, storage) = high confidence
+      - LLM-derived (overpay_ratio, writing_quality) = medium confidence
+      - Derived/heuristic (title_score, canonical_confidence) = medium-low
+    """
+    # Each feature: (value_present, reliability_weight 0-1)
+    feature_weights = [
+        (features.numeric.get("condition"), 0.90),        # scraped, very reliable
+        (features.numeric.get("overpay_ratio"), 0.55),    # LLM approximation
+        (features.numeric.get("warranty_months"), 0.85),  # scraped, reliable
+        (features.numeric.get("writing_quality"), 0.50),  # LLM text analysis
+        (features.numeric.get("title_score"), 0.70),      # heuristic match
+        (features.numeric.get("canonical_confidence"), 0.65),  # NLP match
+        (features.numeric.get("ram_gb"), 0.90),           # scraped spec
+        (features.numeric.get("storage_gb"), 0.90),       # scraped spec
     ]
-    present = sum(1 for value in fields if value is not None)
-    ratio = present / len(fields)
-    confidence = round(0.5 + 0.5 * ratio, 2)
+
+    total_weight = sum(w for _, w in feature_weights)
+    present_weight = sum(w for val, w in feature_weights if val is not None)
+
+    raw_confidence = present_weight / total_weight if total_weight > 0 else 0.0
+
+    # Scale: 50% baseline + 50% from data quality
+    confidence = round(0.5 + 0.5 * raw_confidence, 2)
     return max(0.1, min(0.99, confidence))
 
 

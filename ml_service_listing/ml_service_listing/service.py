@@ -174,3 +174,82 @@ def _retrain_full_task() -> None:
             "retrain_full_failed",
             extra={"event": "retrain_full_failed", "error": str(exc)},
         )
+
+
+# ── Labeled Retrain (Bootstrapping) ────────────────────────────────────
+
+class LabeledListing(BaseModel):
+    listing: dict[str, Any]  # Full listing JSON (same format as predict endpoint)
+    label: str  # "trusted" or "suspicious"
+
+
+class LabeledRetrainRequest(BaseModel):
+    entries: list[LabeledListing]
+
+
+class LabeledRetrainResponse(BaseModel):
+    status: str
+    labels_used: int
+    model_path: str
+
+
+@app.post(
+    "/api/trust-score/retrain-from-labels",
+    response_model=LabeledRetrainResponse,
+    status_code=202,
+)
+async def retrain_from_labels(
+    request: LabeledRetrainRequest,
+    background_tasks: BackgroundTasks,
+) -> LabeledRetrainResponse:
+    """Retrain CatBoost using admin-labeled ground truth.
+
+    Receives full listing JSON + label for each entry.
+    "trusted" → trust_score=8.0, "suspicious" → trust_score=2.0.
+    """
+    if not request.entries:
+        raise HTTPException(status_code=400, detail="entries list cannot be empty")
+
+    labeled_entries: list[dict[str, Any]] = []
+    for entry in request.entries:
+        lbl = entry.label.lower()
+        if lbl not in ("trusted", "suspicious"):
+            continue
+
+        data = dict(entry.listing)
+        data["trustScore"] = 8.0 if lbl == "trusted" else 2.0
+        data["source"] = "admin_label"
+        labeled_entries.append(data)
+
+    if not labeled_entries:
+        raise HTTPException(status_code=400, detail="no valid entries")
+
+    _logger.info(
+        "labeled_retrain_queued",
+        extra={
+            "event": "labeled_retrain_queued",
+            "labels_count": len(labeled_entries),
+        },
+    )
+
+    background_tasks.add_task(_retrain_from_labels_task, labeled_entries)
+    return LabeledRetrainResponse(
+        status="started",
+        labels_used=len(labeled_entries),
+        model_path=_settings.model_path,
+    )
+
+
+def _retrain_from_labels_task(labeled_entries: list[dict[str, Any]]) -> None:
+    try:
+        from ml_service_listing.training.retrainer import retrain_full_from_entries
+        retrain_full_from_entries(
+            entries=labeled_entries,
+            model_path=_settings.model_path,
+            logger=_logger,
+        )
+    except Exception as exc:
+        _logger.error(
+            "labeled_retrain_failed",
+            extra={"event": "labeled_retrain_failed", "error": str(exc)},
+        )

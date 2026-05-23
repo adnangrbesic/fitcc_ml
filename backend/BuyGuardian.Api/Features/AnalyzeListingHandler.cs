@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using BuyGuardian.Api.Data;
 using BuyGuardian.Api.Models;
 using BuyGuardian.Api.Interfaces;
+using BuyGuardian.Api.Extensions;
 using System.Text.Json;
 
 namespace BuyGuardian.Api.Features;
@@ -125,7 +126,8 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
         {
             var rawList = await _context.Listings
                 .Where(l => l.ProductId == listing.ProductId && l.IsActive && l.ItemId != listing.ItemId && l.Price > 0)
-                .Where(l => l.TrustScore > 0.65)
+                .Where(l => l.TrustScore > 0.65 && l.IsAnomaly != true)
+                .Where(l => l.Seller == null || l.Seller.TrustScore >= 0.40)
                 .OrderBy(l => l.Price)
                 .Take(5) 
                 .Select(l => new { 
@@ -180,6 +182,9 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
             listing.Product?.CategoryName,
             listing.Product?.CanonicalName,
             warranty,
+            listing.Product?.Attributes != null 
+                ? AttributeNormalizer.Normalize(listing.Product.Attributes) 
+                : new Dictionary<string, object>(),
             // Isolation Forest anomaly detection
             listing.AnomalyScore,
             listing.IsAnomaly,

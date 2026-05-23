@@ -35,6 +35,16 @@ public interface IMlService
     /// Returns null if the trust score service is unavailable.
     /// </summary>
     Task<TrustScoreRetrainResult?> TriggerTrustScoreFullRetrainAsync();
+
+    /// <summary>
+    /// Trigger CatBoost retraining with admin-labeled ground truth data.
+    /// Labels indicate which listings are trusted/suspicious.
+    /// listingsMap provides full Listing entities for feature extraction.
+    /// This breaks the rule→model→rule loop.
+    /// </summary>
+    Task<RetrainFromLabelsResult?> TriggerTrustScoreRetrainWithLabelsAsync(
+        List<(string ItemId, string Label)> labels,
+        Dictionary<string, Listing> listingsMap);
 }
 
 /// <summary>
@@ -70,5 +80,14 @@ public record TrustScoreResult(
 public record TrustScoreRetrainResult(
     string Status,
     int Rows,
+    string ModelPath
+);
+
+/// <summary>
+/// Response from the labeled retrain endpoint.
+/// </summary>
+public record RetrainFromLabelsResult(
+    string Status,
+    int LabelsUsed,
     string ModelPath
 );

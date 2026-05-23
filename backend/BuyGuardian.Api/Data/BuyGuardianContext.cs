@@ -15,6 +15,8 @@ public class BuyGuardianContext : DbContext
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<PriceHistory> PriceHistories => Set<PriceHistory>();
     public DbSet<SearchQuery> SearchQueries => Set<SearchQuery>();
+    public DbSet<AnalysisVote> AnalysisVotes => Set<AnalysisVote>();
+    public DbSet<PriceAlert> PriceAlerts => Set<PriceAlert>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -63,6 +65,22 @@ public class BuyGuardianContext : DbContext
         modelBuilder.Entity<SearchQuery>(entity =>
         {
             entity.HasIndex(e => e.QueryTerm).IsUnique();
+        });
+
+        modelBuilder.Entity<AnalysisVote>(entity =>
+        {
+            // One vote per fingerprint per listing
+            entity.HasIndex(e => new { e.ItemId, e.UserFingerprint }).IsUnique();
+            entity.HasIndex(e => e.ItemId);
+            entity.Property(e => e.Vote).HasMaxLength(4);
+            entity.Property(e => e.UserFingerprint).HasMaxLength(64);
+        });
+
+        modelBuilder.Entity<PriceAlert>(entity =>
+        {
+            entity.HasIndex(e => e.ItemId);
+            entity.HasIndex(e => e.UserFingerprint);
+            entity.HasIndex(e => e.IsActive);
         });
     }
 }

@@ -205,4 +205,60 @@ public class MlService : IMlService
             return null;
         }
     }
+
+    public async Task<RetrainFromLabelsResult?> TriggerTrustScoreRetrainWithLabelsAsync(
+        List<(string ItemId, string Label)> labels,
+        Dictionary<string, Listing> listingsMap)
+    {
+        try
+        {
+            var entries = labels
+                .Where(l => listingsMap.ContainsKey(l.ItemId))
+                .Select(l =>
+                {
+                    var listing = listingsMap[l.ItemId];
+                    return new
+                    {
+                        listing = TrustScoreListingPayload.FromListing(listing),
+                        label = l.Label
+                    };
+                })
+                .ToList();
+
+            var payload = new { entries };
+            var json = JsonSerializer.Serialize(payload, JsonOpts);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var url = $"{_trustScoreBaseUrl}/api/trust-score/retrain-from-labels";
+
+            _logger.LogInformation(
+                "Sending {Count} labeled entries to ML service for retraining",
+                entries.Count);
+
+            var response = await _httpClient.PostAsync(url, content);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("Labeled retrain returned {StatusCode}: {Body}", response.StatusCode, body);
+                return null;
+            }
+
+            var responseJson = await response.Content.ReadAsStringAsync();
+            return JsonSerializer.Deserialize<RetrainFromLabelsResult>(responseJson, JsonOpts);
+        }
+        catch (TaskCanceledException)
+        {
+            _logger.LogWarning("Labeled retrain request timed out");
+            return null;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Trust score service unavailable for labeled retrain");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error calling labeled retrain");
+            return null;
+        }
+    }
 }

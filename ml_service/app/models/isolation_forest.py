@@ -109,7 +109,11 @@ def _derive_anomaly_type(
 
     # Price deviation has directional meaning
     if dominant_feature == "price_deviation":
+        # If underpriced but has warranty, it's less suspicious
         if dominant_z < -2.0:
+            has_warranty = feature_vector[2] > 0.0  # warranty_weight > 0
+            if has_warranty and feature_vector[2] >= 0.25:  # at least ~1.5 months warranty
+                return "underpriced_with_warranty"
             return "underpriced"
         elif dominant_z > 2.0:
             return "overpriced"
@@ -298,6 +302,17 @@ async def score_listing(item_id: str) -> AnomalyResult | None:
             atype = "overpriced"
         else:
             atype = None
+
+        # Warranty guard for z-score fallback
+        if is_anomaly:
+            meta = target.get("raw_metadata") or {}
+            wm = _safe_int(_extract_from_metadata(meta, "context", "warranty_months"), 0)
+            warranty_guard = min(float(wm) / 6.0, 1.0)
+            price_diff = abs(target_price - median_price) / median_price if median_price else 0
+            if warranty_guard >= 0.5 and price_diff < 0.30:
+                is_anomaly = False
+                atype = None
+
         return AnomalyResult(
             item_id=item_id,
             product_id=product_id_str,
@@ -366,6 +381,23 @@ async def score_listing(item_id: str) -> AnomalyResult | None:
         group_mean = np.frombuffer(stats["mean"], dtype=np.float64)
         group_std = np.frombuffer(stats["std"], dtype=np.float64)
         anomaly_type = _derive_anomaly_type(feature_vector, group_mean, group_std)
+        
+        # Sanity check: IF forces contamination. Reject trivial price anomalies.
+        if anomaly_type in ("underpriced", "overpriced", "price_anomaly", "underpriced_with_warranty"):
+            price_diff_ratio = abs(target_price - median_price) / median_price if median_price else 0
+            # Less than 15% deviation is not a true anomaly
+            if price_diff_ratio < 0.15:
+                is_anomaly = False
+                anomaly_type = None
+
+        # Additional warranty guard: listings with 3+ months warranty are less suspicious
+        warranty_weight_val = feature_vector[2] if len(feature_vector) > 2 else 0.0
+        if is_anomaly and warranty_weight_val >= 0.5:  # 3+ months warranty
+            price_diff_ratio = abs(target_price - median_price) / median_price if median_price else 0
+            # With solid warranty, only flag if price is >30% off median
+            if price_diff_ratio < 0.30:
+                is_anomaly = False
+                anomaly_type = None
 
     # Build feature dict for transparency
     features_dict = {name: float(feature_vector[i]) for i, name in enumerate(FEATURE_NAMES)}
@@ -502,6 +534,23 @@ async def score_product_batch(product_id: UUID | str) -> list[AnomalyResult]:
         anomaly_type = None
         if is_anomaly:
             anomaly_type = _derive_anomaly_type(matrix[i], group_mean, group_std)
+            
+            # Sanity check: IF forces contamination. Reject trivial price anomalies.
+            if anomaly_type in ("underpriced", "overpriced", "price_anomaly", "underpriced_with_warranty"):
+                target_price = float(listing.get("price", 0))
+                price_diff_ratio = abs(target_price - median_price) / median_price if median_price else 0
+                if price_diff_ratio < 0.15:  # Less than 15% deviation is not a true anomaly
+                    is_anomaly = False
+                    anomaly_type = None
+
+            # Additional warranty guard: listings with 3+ months warranty are less suspicious
+            warranty_weight_val = float(matrix[i][2]) if matrix.shape[1] > 2 else 0.0
+            if is_anomaly and warranty_weight_val >= 0.5:  # 3+ months warranty
+                target_price = float(listing.get("price", 0))
+                price_diff_ratio = abs(target_price - median_price) / median_price if median_price else 0
+                if price_diff_ratio < 0.30:
+                    is_anomaly = False
+                    anomaly_type = None
 
         features_dict = {name: float(matrix[i][j]) for j, name in enumerate(FEATURE_NAMES)}
 

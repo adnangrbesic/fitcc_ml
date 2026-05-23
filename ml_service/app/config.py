@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     model_cache_ttl_seconds: int = 86400  # 24h — models refreshed every 6h anyway
 
     # ── Isolation Forest Defaults ─────────────────────────────────────────
-    if_contamination: float = 0.10
+    if_contamination: float = 0.05  # Reduced from 0.10 — fewer false positives
     if_n_estimators: int = 200
     if_max_samples: str = "auto"
     if_random_state: int = 42

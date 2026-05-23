@@ -18,6 +18,7 @@ export interface AnalysisResult {
   warrantyMonths?: number;
   category?: string;
   productName?: string;
+  attributes?: Record<string, any>;  // Dynamic product specs
   // Anomaly fields
   anomalyScore?: number;
   isAnomaly?: boolean;
@@ -45,6 +46,45 @@ export interface Recommendation {
   type: 'price_peer' | 'value_upgrade' | 'budget_saver';
   badge: string;
   reason: string;
+  attributes?: Record<string, any>;  // Dynamic product specs
+}
+
+export interface VoteResponse {
+  accepted: boolean;
+  reason: string;
+  aggregateScore?: number | null;
+  yourVote?: string;
+}
+
+export interface VoteStatusResponse {
+  itemId: string;
+  aggregateScore?: number | null;
+  totalVotes: number;
+  yourVote?: string | null;
+}
+
+export interface PriceAlertResponse {
+  alertId: string;
+  alreadySubscribed: boolean;
+  currentPrice: number;
+  message: string;
+}
+
+export interface PriceAlertStatusResponse {
+  isSubscribed: boolean;
+  triggered: boolean;
+  subscribedPrice: number;
+  currentPrice: number;
+  targetPrice?: number | null;
+}
+
+export interface TriggeredAlertInfo {
+  itemId: string;
+  title: string;
+  oldPrice: number;
+  newPrice: number;
+  savings: number;
+  savingsPercent: number;
 }
 
 export interface AnalysisError {
@@ -119,6 +159,34 @@ export class BuyGuardianService {
     });
   }
 
+  private sanitizeResult(result: AnalysisResult): AnalysisResult {
+    const pos = result.positiveFeedback ?? 0;
+    const neg = result.negativeFeedback ?? 0;
+    const total = pos + neg;
+    
+    // Filter out silly negative feedback flag if < 5%
+    if (total >= 10 && neg > 0) {
+      const ratio = neg / total;
+      if (ratio < 0.05) {
+        if (result.risks) {
+          result.risks = result.risks.filter(r => !r.includes('negative_feedback_ratio') && !r.includes('negative_reviews'));
+        }
+        if (result.uiAlerts) {
+          result.uiAlerts = result.uiAlerts.filter(r => !r.includes('negative_feedback_ratio') && !r.includes('negative_reviews'));
+        }
+        
+        if (result.isSuspicious) {
+           const seriousRisks = [...(result.risks || []), ...(result.uiAlerts || [])]
+              .filter(r => r !== 'new_listing' && r !== 'listing_staleness' && !r.includes('underpriced'));
+           if (seriousRisks.length === 0) {
+              result.isSuspicious = false;
+           }
+        }
+      }
+    }
+    return result;
+  }
+
   async analyze(itemId: string): Promise<AnalysisResult> {
     const baseUrl = await this.getBaseUrl();
     return new Promise((resolve, reject) => {
@@ -127,16 +195,15 @@ export class BuyGuardianService {
           timeout(15000),
           catchError((err: HttpErrorResponse) => {
             if (err.status === 404) {
-              // Not found (processing), connect to SignalR
               this.waitForSignalR(baseUrl, itemId, resolve, reject);
-              return of(null as any); // prevent further error propagation
+              return of(null as any);
             }
             const parsedErr = this.parseError(err);
             reject(parsedErr);
             return throwError(() => parsedErr);
           })
         ).subscribe(result => {
-          if (result) resolve(result); // result is null if we went down the SignalR path
+          if (result) resolve(this.sanitizeResult(result));
         });
     });
   }
@@ -154,7 +221,7 @@ export class BuyGuardianService {
         // Retry the HTTP request now that it's ready
         this.http.post<AnalysisResult>(`${baseUrl}/api/analyze/${itemId}`, {})
           .subscribe({
-             next: res => resolve(res),
+             next: res => resolve(this.sanitizeResult(res)),
              error: err => reject(this.parseError(err))
           });
       }
@@ -187,6 +254,94 @@ export class BuyGuardianService {
           catchError(() => of([]))
         ).subscribe(resolve);
     });
+  }
+
+  // ── Voting / Feedback (#10 + #1) ────────────────────────────────────
+
+  async castVote(itemId: string, vote: 'up' | 'down', fingerprint: string, viewedAt: Date): Promise<VoteResponse> {
+    const baseUrl = await this.getBaseUrl();
+    return new Promise((resolve) => {
+      this.http.post<VoteResponse>(`${baseUrl}/api/feedback/vote`, {
+        itemId, vote, fingerprint, viewedAt: viewedAt.toISOString()
+      }).pipe(
+        timeout(5000),
+        catchError(() => of({ accepted: false, reason: 'Server nedostupan.', aggregateScore: null } as VoteResponse))
+      ).subscribe(resolve);
+    });
+  }
+
+  async getVoteStatus(itemId: string, fingerprint: string): Promise<VoteStatusResponse> {
+    const baseUrl = await this.getBaseUrl();
+    return new Promise((resolve) => {
+      this.http.get<VoteStatusResponse>(`${baseUrl}/api/feedback/vote/${itemId}?fingerprint=${encodeURIComponent(fingerprint)}`)
+        .pipe(
+          timeout(5000),
+          catchError(() => of({ itemId, aggregateScore: null, totalVotes: 0 } as VoteStatusResponse))
+        ).subscribe(resolve);
+    });
+  }
+
+  // ── Price Alerts (#9) ───────────────────────────────────────────────
+
+  async subscribePriceAlert(itemId: string, fingerprint: string, targetPrice?: number): Promise<PriceAlertResponse> {
+    const baseUrl = await this.getBaseUrl();
+    return new Promise((resolve) => {
+      this.http.post<PriceAlertResponse>(`${baseUrl}/api/listings/${itemId}/alerts`, {
+        fingerprint, targetPrice
+      }).pipe(
+        timeout(5000),
+        catchError(() => of({ message: 'Greška.', alreadySubscribed: false, currentPrice: 0, alertId: '' } as PriceAlertResponse))
+      ).subscribe(resolve);
+    });
+  }
+
+  async getAlertStatus(itemId: string, fingerprint: string): Promise<PriceAlertStatusResponse> {
+    const baseUrl = await this.getBaseUrl();
+    return new Promise((resolve) => {
+      this.http.get<PriceAlertStatusResponse>(`${baseUrl}/api/listings/${itemId}/alerts?fingerprint=${encodeURIComponent(fingerprint)}`)
+        .pipe(
+          timeout(5000),
+          catchError(() => of({ isSubscribed: false, triggered: false, subscribedPrice: 0, currentPrice: 0 } as PriceAlertStatusResponse))
+        ).subscribe(resolve);
+    });
+  }
+
+  async unsubscribePriceAlert(itemId: string, fingerprint: string): Promise<void> {
+    const baseUrl = await this.getBaseUrl();
+    return new Promise((resolve) => {
+      this.http.delete(`${baseUrl}/api/listings/${itemId}/alerts?fingerprint=${encodeURIComponent(fingerprint)}`)
+        .pipe(timeout(5000), catchError(() => of(null)))
+        .subscribe(() => resolve());
+    });
+  }
+
+  async getPendingAlerts(fingerprint: string): Promise<TriggeredAlertInfo[]> {
+    const baseUrl = await this.getBaseUrl();
+    return new Promise((resolve) => {
+      this.http.get<TriggeredAlertInfo[]>(`${baseUrl}/api/listings/alerts/pending?fingerprint=${encodeURIComponent(fingerprint)}`)
+        .pipe(timeout(5000), catchError(() => of([])))
+        .subscribe(resolve);
+    });
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────
+
+  getFingerprint(): string {
+    // Simple browser fingerprint: screen + timezone + language
+    const components = [
+      navigator.hardwareConcurrency || 4,
+      screen.width, screen.height, screen.colorDepth,
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+      navigator.language,
+    ];
+    let hash = 0;
+    const str = components.join('|');
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash |= 0; // Convert to 32bit integer
+    }
+    return 'fp_' + Math.abs(hash).toString(36);
   }
 
   saveConfig(url: string): Promise<void> {

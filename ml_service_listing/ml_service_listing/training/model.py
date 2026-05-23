@@ -21,9 +21,11 @@ def train_catboost_regressor(
 
     model = CatBoostRegressor(
         iterations=500,
-        depth=6,
-        learning_rate=0.1,
+        depth=5,               # Reduced from 6 — less overfitting on sparse data
+        learning_rate=0.05,    # Reduced from 0.1 — more conservative learning
+        l2_leaf_reg=3.0,       # L2 regularization to prevent overfitting
         loss_function="RMSE",
+        early_stopping_rounds=50,  # Stop early if no improvement for 50 rounds
         verbose=False,
     )
     model.fit(X, y, cat_features=cat_features)
@@ -69,9 +71,11 @@ def continue_training(
 
     model = CatBoostRegressor(
         iterations=iterations,
-        depth=6,
-        learning_rate=0.1,
+        depth=5,               # Matches train_catboost_regressor
+        learning_rate=0.05,
+        l2_leaf_reg=3.0,
         loss_function="RMSE",
+        early_stopping_rounds=20,
         verbose=False,
     )
 

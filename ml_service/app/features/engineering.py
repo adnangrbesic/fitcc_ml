@@ -6,7 +6,7 @@
 Features (per listing, within a product group):
     1. Relative Price Deviation  — (price - median) / median
     2. Condition-to-Price Ratio  — condition / normalized_price
-    3. Warranty Weight           — binary 0/1
+    3. Warranty Weight           — proportional scale min(m/6, 1.0) for warranty months
     4. Seller Reliability Anchor — log1p(deliveries) * log1p(age_months)
     5. Price Volatility          — std(price_history) / median
     6. Listing Staleness         — days since first scraped
@@ -107,9 +107,12 @@ def extract_features_for_listing(
     # Avoid division by zero for normalized_price
     condition_to_price = condition / max(normalized_price, 0.01)
 
-    # ── Feature 3: Warranty Weight ────────────────────────────────────────
+    # ── Feature 3: Warranty Weight (proportional, 0–1 scale) ────────────
+    # A listing with 12+ months warranty gets max weight of 1.0.
+    # Scales proportionally so that longer warranties (e.g. 24 months)
+    # aren't unfairly penalized vs. 1-month "warranties".
     warranty_months = _safe_int(_extract_from_metadata(meta, "context", "warranty_months"), 0)
-    warranty_weight = 1.0 if warranty_months > 0 else 0.0
+    warranty_weight = min(float(warranty_months) / 6.0, 1.0) if warranty_months > 0 else 0.0
 
     # ── Feature 4: Seller Reliability Anchor ──────────────────────────────
     deliveries = _safe_int(listing.get("successful_deliveries"), 0)

@@ -5,6 +5,8 @@ using BuyGuardian.Api.Data;
 using BuyGuardian.Api.Models;
 using BuyGuardian.Api.Models.Requests;
 using BuyGuardian.Api.Features;
+using BuyGuardian.Api.Services;
+using BuyGuardian.Api.Extensions;
 using Pgvector;
 using Pgvector.EntityFrameworkCore;
 
@@ -150,6 +152,9 @@ public class ListingsController : ControllerBase
     ///   2. Value Upgrade   — slightly more expensive (+5% to +25%), better specs
     ///   3. Budget Saver    — cheaper alternative (-10% to -30%), still trusted
     ///
+    /// SAFETY: NEVER recommends listings flagged as anomalies (IsAnomaly=true)
+    /// or with TrustScore &lt; 0.45, regardless of seller reputation.
+    ///
     /// Uses pgvector cosine similarity on ProductVector for fast category matching,
     /// and percentage-based price ranges so it scales from phones to cars.
     /// </summary>
@@ -178,7 +183,8 @@ public class ListingsController : ControllerBase
         // 2. Fetch candidate listings from the same category within a reasonable price range.
         // This unlocks cross-brand recommendations (e.g. suggesting a Pixel for an iPhone buyer)
         // by evaluating specs rather than strict textual/vector similarity.
-        const double minSellerTrust = 0.40; // Only recommend trusted sellers
+        const double minSellerTrust = 0.45; // Only recommend trusted sellers (raised from 0.40)
+        const double minListingTrust = 0.45; // NEVER recommend listings our own system doesn't trust
         var minPrice = (decimal)(targetPrice * 0.60); // Down to -40%
         var maxPrice = (decimal)(targetPrice * 1.30); // Up to +30%
 
@@ -191,6 +197,8 @@ public class ListingsController : ControllerBase
                      && l.Product.CategoryName == target.Product.CategoryName
                      && l.Seller != null
                      && l.Seller.TrustScore >= minSellerTrust
+                     && l.TrustScore >= minListingTrust   // NEVER recommend low-trust listings
+                     && l.IsAnomaly != true               // NEVER recommend anomaly-flagged listings
                      && l.Price >= minPrice
                      && l.Price <= maxPrice);
 
@@ -207,6 +215,7 @@ public class ListingsController : ControllerBase
                 SellerName = l.Seller.Username,
                 ProductName = l.Product!.CanonicalName,
                 ProductAttrs = l.Product.Attributes,
+                l.RawMetadata,
                 CosineDistance = l.Product.ProductVector != null && targetVector != null 
                                  ? l.Product.ProductVector.CosineDistance(targetVector) 
                                  : 1.0
@@ -219,7 +228,6 @@ public class ListingsController : ControllerBase
         // 4. Extract target product specs for upgrade comparison
         int targetStorage = ExtractIntAttr(target.Product.Attributes, "storage_gb");
         int targetRam = ExtractIntAttr(target.Product.Attributes, "ram_gb");
-
         var recommendations = new List<RecommendationDto>();
         var client = _httpClientFactory.CreateClient();
         client.Timeout = TimeSpan.FromSeconds(1.5); // 1.5s limit for real-time check
@@ -246,7 +254,8 @@ public class ListingsController : ControllerBase
                     c.ProductName,
                     "price_peer",
                     $"Slična cijena ({diff:+0.0;-0.0}%)",
-                    "Oglas u istom cjenovnom rangu sa pouzdanim prodavačem."
+                    "Oglas u istom cjenovnom rangu sa pouzdanim prodavačem.",
+                    AttributeNormalizer.Normalize(c.ProductAttrs)
                 ));
                 break;
             }
@@ -311,7 +320,8 @@ public class ListingsController : ControllerBase
                     c.ProductName,
                     "value_upgrade",
                     $"Bolje karakteristike (+{diff:0.0}%)",
-                    $"Ima {specText} za samo {diff:0.0}% višu cijenu."
+                    $"Ima {specText} za samo {diff:0.0}% višu cijenu.",
+                    AttributeNormalizer.Normalize(c.ProductAttrs)
                 ));
                 break;
             }
@@ -343,7 +353,8 @@ public class ListingsController : ControllerBase
                     c.ProductName,
                     "budget_saver",
                     $"Uštedi {savings:0.0}%",
-                    $"Sličan proizvod za {savings:0.0}% nižu cijenu sa pouzdanim prodavačem."
+                    $"Sličan proizvod za {savings:0.0}% nižu cijenu sa pouzdanim prodavačem.",
+                    AttributeNormalizer.Normalize(c.ProductAttrs)
                 ));
                 break;
             }
@@ -379,10 +390,184 @@ public class ListingsController : ControllerBase
         if (int.TryParse(val?.ToString(), out var result)) return result;
         return 0;
     }
+
+    // ── Price Alert Endpoints (#9) ──────────────────────────────────────
+
+    /// <summary>
+    /// POST /api/listings/{itemId}/alerts
+    /// Subscribe to price drop notifications for a listing.
+    /// </summary>
+    [HttpPost("{itemId}/alerts")]
+    public async Task<ActionResult<PriceAlertResponse>> SubscribeAlert(
+        string itemId, [FromBody] PriceAlertRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Fingerprint))
+            return BadRequest(new { error = "fingerprint is required" });
+
+        var listing = await _context.Listings
+            .FirstOrDefaultAsync(l => l.ItemId == itemId && l.IsActive);
+
+        if (listing == null)
+            return NotFound(new { error = "Listing not found" });
+
+        var userFp = HashAlertFingerprint(request.Fingerprint, itemId);
+
+        // Check for existing active alert
+        var existing = await _context.PriceAlerts
+            .FirstOrDefaultAsync(a => a.ItemId == itemId
+                                   && a.UserFingerprint == userFp
+                                   && a.IsActive);
+
+        if (existing != null)
+        {
+            return Ok(new PriceAlertResponse
+            {
+                AlertId = existing.Id.ToString(),
+                AlreadySubscribed = true,
+                CurrentPrice = listing.Price,
+                Message = "Već ste pretplaćeni na obavijest o padu cijene za ovaj oglas."
+            });
+        }
+
+        var alert = new PriceAlert
+        {
+            ItemId = itemId,
+            UserFingerprint = userFp,
+            SubscribedPrice = listing.Price,
+            TargetPrice = request.TargetPrice,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.PriceAlerts.Add(alert);
+        await _context.SaveChangesAsync();
+
+        return Ok(new PriceAlertResponse
+        {
+            AlertId = alert.Id.ToString(),
+            AlreadySubscribed = false,
+            CurrentPrice = listing.Price,
+            Message = request.TargetPrice.HasValue
+                ? $"Obavijestit ćemo vas kad cijena padne ispod {request.TargetPrice:F0} KM."
+                : "Obavijestit ćemo vas čim cijena padne."
+        });
+    }
+
+    /// <summary>
+    /// GET /api/listings/{itemId}/alerts?fingerprint=xxx
+    /// Check alert status for a listing.
+    /// </summary>
+    [HttpGet("{itemId}/alerts")]
+    public async Task<ActionResult<PriceAlertStatusResponse>> GetAlertStatus(
+        string itemId, [FromQuery] string fingerprint)
+    {
+        if (string.IsNullOrWhiteSpace(fingerprint))
+            return BadRequest(new { error = "fingerprint is required" });
+
+        var userFp = HashAlertFingerprint(fingerprint, itemId);
+
+        var alert = await _context.PriceAlerts
+            .FirstOrDefaultAsync(a => a.ItemId == itemId
+                                   && a.UserFingerprint == userFp
+                                   && a.IsActive);
+
+        var listing = await _context.Listings
+            .FirstOrDefaultAsync(l => l.ItemId == itemId);
+
+        return Ok(new PriceAlertStatusResponse
+        {
+            IsSubscribed = alert != null,
+            Triggered = alert?.Triggered ?? false,
+            SubscribedPrice = alert?.SubscribedPrice ?? 0,
+            CurrentPrice = listing?.Price ?? 0,
+            TargetPrice = alert?.TargetPrice,
+            CreatedAt = alert?.CreatedAt
+        });
+    }
+
+    /// <summary>
+    /// DELETE /api/listings/{itemId}/alerts?fingerprint=xxx
+    /// Unsubscribe from price alerts.
+    /// </summary>
+    [HttpDelete("{itemId}/alerts")]
+    public async Task<IActionResult> UnsubscribeAlert(
+        string itemId, [FromQuery] string fingerprint)
+    {
+        if (string.IsNullOrWhiteSpace(fingerprint))
+            return BadRequest(new { error = "fingerprint is required" });
+
+        var userFp = HashAlertFingerprint(fingerprint, itemId);
+
+        var alerts = await _context.PriceAlerts
+            .Where(a => a.ItemId == itemId
+                     && a.UserFingerprint == userFp
+                     && a.IsActive)
+            .ToListAsync();
+
+        if (!alerts.Any())
+            return NotFound(new { error = "No active alert found" });
+
+        foreach (var a in alerts)
+            a.IsActive = false;
+
+        await _context.SaveChangesAsync();
+        return Ok(new { message = "Obavijest isključena." });
+    }
+
+    private static string HashAlertFingerprint(string fingerprint, string itemId)
+    {
+        var input = $"{fingerprint}:{itemId}:alert-salt";
+        var hash = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(input));
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// GET /api/listings/alerts/pending?fingerprint=xxx
+    /// Polled by the Chrome extension to check for triggered price alerts.
+    /// Returns triggered alerts and clears them from the queue.
+    /// </summary>
+    [HttpGet("alerts/pending")]
+    public ActionResult<List<TriggeredAlertInfo>> GetPendingAlerts([FromQuery] string fingerprint)
+    {
+        if (string.IsNullOrWhiteSpace(fingerprint))
+            return BadRequest(new { error = "fingerprint is required" });
+
+        var userFp = HashAlertFingerprint(fingerprint, "global");
+        var alerts = PriceAlertChecker.DrainTriggeredAlerts(userFp);
+        return Ok(alerts);
+    }
+}
+
+// ── Price Alert DTOs ──────────────────────────────────────────────────────
+
+public class PriceAlertRequest
+{
+    public string Fingerprint { get; set; } = string.Empty;
+    public decimal? TargetPrice { get; set; }
+}
+
+public class PriceAlertResponse
+{
+    public string AlertId { get; set; } = string.Empty;
+    public bool AlreadySubscribed { get; set; }
+    public decimal CurrentPrice { get; set; }
+    public string Message { get; set; } = string.Empty;
+}
+
+public class PriceAlertStatusResponse
+{
+    public bool IsSubscribed { get; set; }
+    public bool Triggered { get; set; }
+    public decimal SubscribedPrice { get; set; }
+    public decimal CurrentPrice { get; set; }
+    public decimal? TargetPrice { get; set; }
+    public DateTime? CreatedAt { get; set; }
 }
 
 /// <summary>
 /// A single recommendation card returned to the extension.
+/// Attributes contains product specs (dynamic — works for any category).
 /// </summary>
 public record RecommendationDto(
     string ItemId,
@@ -393,5 +578,6 @@ public record RecommendationDto(
     string ProductName,
     string Type,       // "price_peer" | "value_upgrade" | "budget_saver"
     string Badge,      // Short label for UI chip
-    string Reason      // Explanation sentence
+    string Reason,     // Explanation sentence
+    Dictionary<string, object>? Attributes = null  // Product specs — dynamic per category
 );

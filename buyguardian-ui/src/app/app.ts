@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject, effect } from '@angular/core';
+import { Component, OnInit, signal, inject, effect, AfterViewInit, ElementRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
@@ -17,7 +17,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSliderModule } from '@angular/material/slider';
 
-import { BuyGuardianService, AnalysisResult, AnalysisError, Recommendation } from './services/buyguardian.service';
+import { BuyGuardianService, AnalysisResult, AnalysisError, Recommendation, VoteResponse, VoteStatusResponse, PriceAlertResponse, PriceAlertStatusResponse, TriggeredAlertInfo } from './services/buyguardian.service';
 
 @Component({
   selector: 'app-root',
@@ -42,7 +42,7 @@ import { BuyGuardianService, AnalysisResult, AnalysisError, Recommendation } fro
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })
-export class App implements OnInit {
+export class App implements OnInit, AfterViewInit {
   private service = inject(BuyGuardianService);
 
   itemId = signal('');
@@ -58,6 +58,24 @@ export class App implements OnInit {
   settingsApiUrl = signal('');
   scoreBreakdownOpen = signal(true);
 
+  // Voting state
+  userVote = signal<'up' | 'down' | null>(null);
+  voteSubmitting = signal(false);
+  voteMessage = signal('');
+  communityScore = signal<number | null>(null);
+  voteTotal = signal(0);
+  viewedAt: Date = new Date();
+
+  // Price alert state
+  alertSubscribed = signal(false);
+  alertSubmitting = signal(false);
+  alertMessage = signal('');
+
+  // Side-by-side comparison
+  compareModeActive = signal(false);      // Selection mode: checkboxes visible
+  comparedRecs = signal<Set<string>>(new Set());
+  showFullComparison = signal(false);     // Fullscreen comparison overlay
+
   readonly listingWeight = 0.7;
   readonly sellerWeight = 0.3;
   readonly pricePenaltyMax = 2.0;
@@ -69,7 +87,10 @@ export class App implements OnInit {
   animatedScore = signal<number>(0);
   animatedRingOffset = signal<number>(251.33); // 2 * Math.PI * 40
   showCopiedToast = signal(false);
+  showConfetti = signal(false);
   private animationFrameId: number | null = null;
+  private confettiObserver: IntersectionObserver | null = null;
+  @ViewChild('confettiAnchor') confettiAnchor!: ElementRef;
 
   constructor() {
     effect(() => {
@@ -90,8 +111,34 @@ export class App implements OnInit {
     this.customListingWeight = weights.listing;
     this.customSellerWeight = weights.seller;
     this.customPriceWeight = weights.price;
-    
+
+    // Reset viewedAt for time-gated voting
+    this.viewedAt = new Date();
+
     this.detectFromCurrentTab();
+
+    // Poll for pending price alerts every 5 minutes
+    setInterval(() => this.checkPendingAlerts(), 5 * 60 * 1000);
+    this.checkPendingAlerts();
+  }
+
+  ngAfterViewInit(): void {
+    // Lazy confetti: only start when user scrolls to the "Čestitamo!" section
+    this.confettiObserver = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          this.showConfetti.set(true);
+          this.confettiObserver?.disconnect();
+        }
+      },
+      { threshold: 0.3 }
+    );
+    // Observe after a short delay to let DOM render
+    setTimeout(() => {
+      if (this.confettiAnchor) {
+        this.confettiObserver?.observe(this.confettiAnchor.nativeElement);
+      }
+    }, 500);
   }
 
 
@@ -142,6 +189,8 @@ export class App implements OnInit {
         this.result.set(cached);
         // Load recommendations from cache or fetch
         this.loadRecommendations(response.itemId);
+        this.loadVoteStatus();
+        this.loadAlertStatus();
         // Still refresh in background
         this.analyzeQuietly();
       } else {
@@ -166,6 +215,8 @@ export class App implements OnInit {
       this.loading.set(false);
       this.isProcessing.set(false);
       this.loadRecommendations(id);
+      this.loadVoteStatus();
+      this.loadAlertStatus();
     } catch (err: any) {
       this.error.set(err as AnalysisError);
       this.loading.set(false);
@@ -232,6 +283,17 @@ export class App implements OnInit {
 
   getPriceScore(result: AnalysisResult | null): number | null {
     return this.service.getPriceScore(result);
+  }
+
+  getBulletOffset(market: number, listing: number): number {
+    if (!market || !listing) return 50;
+    const ratio = listing / market;
+    let offset = (ratio - 0.5) * 100;
+    return Math.max(5, Math.min(95, offset));
+  }
+
+  getBulletWidth(offset: number): number {
+    return Math.abs(offset - 50);
   }
 
   getPriceSignalLabel(result: AnalysisResult | null): string {
@@ -383,6 +445,14 @@ export class App implements OnInit {
   }
 
   getQuickSummary(res: AnalysisResult): { text: string; icon: string; type: 'positive' | 'warning' | 'danger' } {
+    if (res.isSuspicious) {
+      return {
+        text: 'Sistem je detektovao ozbiljne rizike. Preporučujemo maksimalan oprez!',
+        icon: 'gpp_bad',
+        type: 'danger'
+      };
+    }
+
     const score = this.getDisplayScore(res) ?? 0;
     const isNew = res.isNewSeller === true;
     const isAnomaly = res.isAnomaly === true;
@@ -457,5 +527,287 @@ Link: https://olx.ba/artikal/${itemId}`;
     }).catch(err => {
       console.error('Failed to copy text: ', err);
     });
+  }
+
+  // ── Voting (#10) ─────────────────────────────────────────────────────
+
+  async loadVoteStatus(): Promise<void> {
+    const id = this.itemId();
+    if (!id) return;
+    const fp = this.service.getFingerprint();
+    const status = await this.service.getVoteStatus(id, fp);
+    this.communityScore.set(status.aggregateScore ?? null);
+    this.voteTotal.set(status.totalVotes);
+    if (status.yourVote === 'up' || status.yourVote === 'down') {
+      this.userVote.set(status.yourVote);
+    }
+  }
+
+  async castVote(vote: 'up' | 'down'): Promise<void> {
+    if (this.voteSubmitting()) return;
+    const id = this.itemId();
+    if (!id) return;
+
+    this.voteSubmitting.set(true);
+    this.voteMessage.set('');
+
+    const fp = this.service.getFingerprint();
+    const response = await this.service.castVote(id, vote, fp, this.viewedAt);
+
+    if (response.accepted) {
+      this.userVote.set(vote);
+      this.communityScore.set(response.aggregateScore ?? null);
+    }
+    this.voteMessage.set(response.reason);
+    this.voteSubmitting.set(false);
+
+    // Clear message after 3 seconds
+    setTimeout(() => this.voteMessage.set(''), 3000);
+  }
+
+  // ── Price Alert (#9) ─────────────────────────────────────────────────
+
+  async loadAlertStatus(): Promise<void> {
+    const id = this.itemId();
+    if (!id) return;
+    const fp = this.service.getFingerprint();
+    const status = await this.service.getAlertStatus(id, fp);
+    this.alertSubscribed.set(status.isSubscribed);
+  }
+
+  async togglePriceAlert(): Promise<void> {
+    if (this.alertSubmitting()) return;
+    const id = this.itemId();
+    if (!id) return;
+
+    this.alertSubmitting.set(true);
+    const fp = this.service.getFingerprint();
+
+    if (this.alertSubscribed()) {
+      await this.service.unsubscribePriceAlert(id, fp);
+      this.alertSubscribed.set(false);
+      this.alertMessage.set('Obavijest isključena.');
+    } else {
+      const res = await this.service.subscribePriceAlert(id, fp);
+      if (res.alertId) {
+        this.alertSubscribed.set(true);
+      }
+      this.alertMessage.set(res.message);
+    }
+
+    this.alertSubmitting.set(false);
+    setTimeout(() => this.alertMessage.set(''), 4000);
+  }
+
+  async checkPendingAlerts(): Promise<void> {
+    const fp = this.service.getFingerprint();
+    try {
+      const alerts = await this.service.getPendingAlerts(fp);
+      for (const alert of alerts) {
+        // Show Chrome notification if available
+        if (chrome?.notifications) {
+          chrome.notifications.create(`price-alert-${alert.itemId}`, {
+            type: 'basic',
+            iconUrl: 'icons/icon128.png',
+            title: '📉 Cijena pala!',
+            message: `${alert.title}: ${alert.oldPrice} → ${alert.newPrice} KM (ušteda ${alert.savingsPercent}%)`,
+            priority: 2
+          });
+        }
+      }
+    } catch { /* silent */ }
+  }
+
+  // ── Side-by-side Comparison (#11) ────────────────────────────────────
+
+  toggleCompareMode(): void {
+    this.compareModeActive.update(v => !v);
+    if (!this.compareModeActive()) {
+      this.comparedRecs.set(new Set());
+    }
+  }
+
+  toggleCompareRec(itemId: string): void {
+    if (!this.compareModeActive()) return;
+    const set = new Set(this.comparedRecs());
+    if (set.has(itemId)) {
+      set.delete(itemId);
+    } else {
+      if (set.size >= 2) {
+        const first = set.values().next().value;
+        if (first) set.delete(first);
+      }
+      set.add(itemId);
+    }
+    this.comparedRecs.set(set);
+  }
+
+  isCompared(itemId: string): boolean {
+    return this.comparedRecs().has(itemId);
+  }
+
+  openFullComparison(): void {
+    if (this.comparedRecs().size === 0) return;
+    this.showFullComparison.set(true);
+  }
+
+  closeFullComparison(): void {
+    this.showFullComparison.set(false);
+  }
+
+  getComparedRecommendations(): Recommendation[] {
+    const selectedIds = this.comparedRecs();
+    return this.recommendations().filter(r => selectedIds.has(r.itemId));
+  }
+
+  // ── Dynamic comparison helpers ────────────────────────────────────
+
+  /// Returns attribute keys that all compared items have in common (plus current listing)
+  getCommonAttributeKeys(): string[] {
+    const current = this.result()?.attributes;
+    const recs = this.getComparedRecommendations();
+
+    // Collect all attribute keys from current listing
+    const currentKeys = new Set(current ? Object.keys(current) : []);
+
+    // Find keys present in ALL recommendations too
+    const common: string[] = [];
+    for (const key of currentKeys) {
+      if (recs.every(r => r.attributes && key in r.attributes)) {
+        common.push(key);
+      }
+    }
+    return common;
+  }
+
+  /// Format an attribute value for display
+  formatAttrValue(value: any): string {
+    if (value === null || value === undefined) return '—';
+    if (typeof value === 'number') {
+      if (Number.isInteger(value)) return value.toString();
+      return value.toFixed(1);
+    }
+    if (typeof value === 'object') {
+      const inner = value.value ?? value.Value ?? '';
+      return String(inner !== '[object Object]' ? inner : '—');
+    }
+    return String(value);
+  }
+
+  /// Check if a value is numeric (for display as dynamic attr row)
+  isNumericAttr(value: any): boolean {
+    if (value === null || value === undefined) return false;
+    if (typeof value === 'number') return true;
+    if (typeof value === 'string') {
+      const parsed = parseFloat(value.replace(',', '.'));
+      return !isNaN(parsed);
+    }
+    // Handle objects that might have a numeric representation
+    if (typeof value === 'object' && value !== null) {
+      const str = String(value.value ?? value.Value ?? value);
+      if (str && str !== '[object Object]') {
+        const parsed = parseFloat(str.replace(',', '.'));
+        return !isNaN(parsed);
+      }
+    }
+    return false;
+  }
+
+  /// Try to parse numeric value (handles strings, numbers, and objects)
+  parseNumericAttr(value: any): number | null {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') {
+      const parsed = parseFloat(value.replace(',', '.'));
+      return isNaN(parsed) ? null : parsed;
+    }
+    if (typeof value === 'object') {
+      const str = String(value.value ?? value.Value ?? '');
+      if (str && str !== '[object Object]') {
+        const parsed = parseFloat(str.replace(',', '.'));
+        return isNaN(parsed) ? null : parsed;
+      }
+    }
+    return null;
+  }
+
+  /// Simple numeric extraction for comparison — handles strings/numbers/objects
+  numVal(value: any): number | null {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number') return value;
+    const str = typeof value === 'string' ? value : String(value?.value ?? value?.Value ?? '');
+    const n = parseFloat(str.replace(',', '.'));
+    return isNaN(n) ? null : n;
+  }
+
+  /// For template: is this recommendation STRICTLY better than current for this attr?
+  isBetterThanCurrent(rec: Recommendation, attrKey: string, currentVal: any): boolean {
+    const rv = this.numVal(rec.attributes?.[attrKey]);
+    const cv = this.numVal(currentVal);
+    if (rv === null || cv === null || rv === cv) return false;
+    const lowerIsBetter = /price|cijena|cost|km|eur/i.test(attrKey);
+    return lowerIsBetter ? rv < cv : rv > cv;
+  }
+
+  /// For template: is this recommendation the best among ALL compared?
+  isBestAmongAll(rec: Recommendation, attrKey: string, all: Recommendation[], currentVal: any): boolean {
+    const rv = this.numVal(rec.attributes?.[attrKey]);
+    const cv = this.numVal(currentVal);
+    if (rv === null || cv === null) return false;
+    const lowerIsBetter = /price|cijena|cost|km|eur/i.test(attrKey);
+
+    // Check against current and all other recs
+    if (lowerIsBetter) {
+      if (rv >= cv) return false;
+      for (const other of all) {
+        if (other.itemId === rec.itemId) continue;
+        const ov = this.numVal(other.attributes?.[attrKey]);
+        if (ov !== null && ov <= rv) return false;
+      }
+      return true;
+    } else {
+      if (rv <= cv) return false;
+      for (const other of all) {
+        if (other.itemId === rec.itemId) continue;
+        const ov = this.numVal(other.attributes?.[attrKey]);
+        if (ov !== null && ov >= rv) return false;
+      }
+      return true;
+    }
+  }
+
+  /// Get a display label for an attribute key (human-readable)
+  getAttrLabel(key: string): string {
+    const labels: Record<string, string> = {
+      'ram_gb': 'RAM', 'ram': 'RAM', 'Radna memorija': 'RAM',
+      'storage_gb': 'Memorija', 'storage': 'Memorija', 'Interna memorija': 'Memorija',
+      'Memorija': 'Memorija', 'Kapacitet': 'Memorija', 'Kapacitet memorije': 'Memorija',
+      'battery_health_percent': 'Baterija', 'battery_health': 'Baterija',
+      'Zdravlje baterije (%)': 'Baterija', 'Baterija': 'Baterija',
+      'condition': 'Stanje', 'stanje': 'Stanje',
+      'warranty_months': 'Garancija', 'garancija': 'Garancija',
+      'screen_size': 'Ekran', 'screen': 'Ekran', 'Ekran': 'Ekran',
+      'processor': 'Procesor', 'cpu': 'Procesor',
+      'camera': 'Kamera', 'Kamera': 'Kamera',
+      'color': 'Boja', 'boja': 'Boja', 'Boja': 'Boja',
+      'year': 'Godina', 'godina': 'Godina', 'Godište': 'Godina',
+      'mileage': 'Kilometraža', 'km': 'Kilometraža', 'Kilometraža': 'Kilometraža',
+      'engine': 'Motor', 'Motor': 'Motor',
+      'fuel': 'Gorivo', 'Gorivo': 'Gorivo',
+      'transmission': 'Mjenjač', 'Mjenjač': 'Mjenjač',
+    };
+    return labels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  /// Unique suffix for attr values that are known to have units
+  getAttrUnit(key: string): string {
+    const units: Record<string, string> = {
+      'ram_gb': ' GB', 'ram': ' GB',
+      'storage_gb': ' GB', 'storage': ' GB',
+      'battery_health_percent': '%', 'screen_size': '"',
+      'warranty_months': ' mj.', 'garancija': ' mj.',
+      'mileage': ' km', 'km': ' km', 'Kilometraža': ' km',
+    };
+    return units[key] || '';
   }
 }

@@ -20,6 +20,7 @@ public record ListingAnalysisResult(
     string? Category,
     string? ProductName,
     int? WarrantyMonths,
+    Dictionary<string, object>? Attributes,
     // Isolation Forest anomaly detection
     double? AnomalyScore,
     bool? IsAnomaly,

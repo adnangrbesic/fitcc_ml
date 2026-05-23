@@ -132,7 +132,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/buyguardian
       - REDIS_URL=redis://redis:6379
-      - IF_CONTAMINATION=0.10
+      - IF_CONTAMINATION=0.05
       - IF_N_ESTIMATORS=200
       - RETRAIN_INTERVAL_HOURS=6
       - MIN_LISTINGS_FOR_IFOREST=5

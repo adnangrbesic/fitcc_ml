@@ -118,7 +118,7 @@
         <div class="results">
 
         <!-- TRUST SCORE -->
-        <mat-card class="trust-card" [ngClass]="getTrustColor(getDisplayScore(res), res.isSuspicious)">
+        <mat-card class="trust-card" [ngClass]="getTrustColor(getDisplayScore(res), res.isSuspicious)" [class.shimmer]="getDisplayScore(res) !== null && getDisplayScore(res)! >= 7 && !res.isSuspicious">
           <div class="trust-specular"></div>
           <mat-card-content class="trust-layout">
             <div class="trust-grid">
@@ -244,12 +244,43 @@
                 }
               }
             </div>
+            @if (res.listingPrice) {
+              <div class="price-bullet-chart">
+                <div class="bullet-track">
+                  <div class="bullet-marker market-marker" style="left: 50%" matTooltip="Prosječna tržišna cijena"></div>
+                  @if (getBulletOffset(res.marketPrice, res.listingPrice); as offset) {
+                    <div class="bullet-fill" 
+                         [style.left]="offset < 50 ? offset + '%' : '50%'"
+                         [style.width]="getBulletWidth(offset) + '%'"
+                         [class.cheap]="offset < 50" 
+                         [class.expensive]="offset > 50"></div>
+                    <div class="bullet-marker listing-marker" 
+                         [style.left]="offset + '%'" 
+                         [class.cheap]="offset < 50" 
+                         [class.expensive]="offset > 50"
+                         matTooltip="Cijena ovog oglasa"></div>
+                  }
+                </div>
+                <div class="bullet-labels">
+                  <span>Povoljnije</span>
+                  <span>Tržišna</span>
+                  <span>Skuplje</span>
+                </div>
+              </div>
+            }
             @if (res.cheapestItemId && res.cheapestPrice) {
               <div class="cheapest-wrapper">
                 @if (res.listingPrice && res.cheapestPrice >= res.listingPrice) {
-                  <div class="best-deal-banner">
+                  <div class="best-deal-banner" #confettiAnchor>
                     <mat-icon>verified</mat-icon>
                     <span>Čestitamo! Ovo je trenutno najpovoljniji pouzdan oglas u bazi!</span>
+                    @if (showConfetti()) {
+                      <div class="confetti-wrapper">
+                         @for (i of [1,2,3,4,5,6,7,8,9,10,11,12]; track i) {
+                           <div class="confetti-piece"></div>
+                         }
+                      </div>
+                    }
                   </div>
                 } @else {
                   <div class="cheapest-mini-lbl">NAJJEFTINIJI POUZDANI OGLAS IZ BAZE</div>
@@ -414,6 +445,42 @@
         <button mat-stroked-button class="share-analysis-btn" (click)="shareAnalysis(res)">
           <mat-icon>share</mat-icon> PODIJELI ANALIZU
         </button>
+
+        <!-- VOTE & ALERT ROW -->
+        <div class="vote-alert-row">
+          @if (!userVote()) {
+            <div class="vote-btns">
+              <button mat-stroked-button class="action-btn" (click)="castVote('up')" [disabled]="voteSubmitting()">
+                <mat-icon>thumb_up</mat-icon> Analiza je točna
+              </button>
+              <button mat-stroked-button class="action-btn" (click)="castVote('down')" [disabled]="voteSubmitting()">
+                <mat-icon>thumb_down</mat-icon> Analiza nije točna
+              </button>
+            </div>
+          } @else {
+            <div class="voted-indicator" [class.up]="userVote() === 'up'" [class.down]="userVote() === 'down'">
+              <mat-icon>{{ userVote() === 'up' ? 'thumb_up' : 'thumb_down' }}</mat-icon>
+              <span>{{ userVote() === 'up' ? 'Ocijenili ste kao točno' : 'Ocijenili ste kao netočno' }}</span>
+            </div>
+          }
+          @if (communityScore() !== null && voteTotal() > 1) {
+            <div class="community-score">
+              <mat-icon>groups</mat-icon>
+              <span>{{ (communityScore()! * 100) | number:'1.0-0' }}% korisnika se slaže ({{ voteTotal() }} glasova)</span>
+            </div>
+          }
+          @if (voteMessage()) {
+            <div class="vote-msg">{{ voteMessage() }}</div>
+          }
+
+          <button mat-stroked-button class="action-btn" [class.active]="alertSubscribed()" (click)="togglePriceAlert()" [disabled]="alertSubmitting()">
+            <mat-icon>{{ alertSubscribed() ? 'notifications_active' : 'notifications' }}</mat-icon>
+            {{ alertSubscribed() ? 'Isključi obavijest' : 'Obavijesti me kad cijena padne' }}
+          </button>
+          @if (alertMessage()) {
+            <div class="alert-msg">{{ alertMessage() }}</div>
+          }
+        </div>
 
         @if (showCopiedToast()) {
           <div class="toast-copied-notification">

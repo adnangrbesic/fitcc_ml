@@ -54,6 +54,9 @@ builder.Services.AddHttpClient<IMlService, MlService>();
 // RabbitMQ Hosted Service
 builder.Services.AddHostedService<ListingConsumer>();
 
+// Price Alert Background Checker
+builder.Services.AddHostedService<PriceAlertChecker>();
+
 // CORS - Explicitly allow Chrome/Edge extensions and local dev origins
 builder.Services.AddCors(options =>
 {
@@ -89,7 +92,7 @@ app.UseCors("ExtensionCors");
 // Support for Private Network Access (Chrome 104+)
 app.Use((context, next) => {
     if (context.Request.Headers.ContainsKey("Access-Control-Request-Private-Network")) {
-        context.Response.Headers.Add("Access-Control-Allow-Private-Network", "true");
+        context.Response.Headers["Access-Control-Allow-Private-Network"] = "true";
     }
     return next();
 });
