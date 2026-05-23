@@ -53,16 +53,16 @@ export interface AnalysisError {
 }
 
 const RISK_LABELS: Record<string, string> = {
-  low_trust: 'Nizak nivo povjerenja',
-  new_listing: 'Novi oglas',
+  low_trust: 'Nizak indeks povjerenja',
+  new_listing: 'Nedavno postavljen oglas',
   new_account: 'Novi korisnički profil',
   high_volatility: 'Nestabilna cijena',
   empty_description: 'Nedostaje opis artikla',
-  low_feedback: 'Malo feedbacka',
-  price_too_low: 'Sumnjivo niska cijena',
+  low_feedback: 'Malo povratnih informacija',
+  price_too_low: 'Previše jeftino — moguća prevara',
   no_phone: 'Nema telefona',
   no_email: 'Email nije verifikovan',
-  high_price: 'Cijena iznad prosjeka',
+  high_price: 'Skuplje od tržišnog prosjeka',
 };
 
 const RISK_EXPLANATIONS: Record<string, string> = {
@@ -334,12 +334,12 @@ export class BuyGuardianService {
   }
 
   getPriceSignalLabel(result: AnalysisResult | null): string {
-    if (!result) return 'N/A';
+    if (!result) return 'N/D';
     if (result.isAnomaly) {
       return this.formatAnomalyType(result.anomalyType || 'anomaly');
     }
-    if (result.anomalyScore !== null && result.anomalyScore !== undefined) return 'Normal';
-    return 'N/A';
+    if (result.anomalyScore !== null && result.anomalyScore !== undefined) return 'Normalna';
+    return 'N/D';
   }
 
   getRiskLabel(risk: string): string {
@@ -347,11 +347,11 @@ export class BuyGuardianService {
     if (risk.includes('anomaly_')) {
       const type = risk.replace(/anomaly_/g, '').trim();
       const anomalyLabels: Record<string, string> = {
-        underpriced: 'Sumnjivo niska cijena (ML)',
-        overpriced: 'Previsoka cijena (ML)',
-        price_anomaly: 'Anomalija u cijeni (ML)',
+        underpriced: 'Previše jeftino — moguća prevara',
+        overpriced: 'Cijena iznad tržišne',
+        price_anomaly: 'Cijena ne odgovara tržištu',
         suspicious_profile: 'Sumnjiv profil',
-        unverified_seller: 'Neprovjereni prodavač',
+        unverified_seller: 'Prodavač nije verifikovan',
         condition_price_mismatch: 'Stanje/cijena ne odgovaraju',
         too_good_to_be_true: 'Prelijepo da bi bilo istinito',
         suspicious_description: 'Sumnjiv opis',
@@ -378,8 +378,27 @@ export class BuyGuardianService {
   }
 
   private formatAnomalyType(type: string): string {
-    const cleaned = type.replace(/^anomaly_/, '').replace(/_/g, ' ');
-    return cleaned.replace(/\b\w/g, (match) => match.toUpperCase());
+    const anomalyTranslations: Record<string, string> = {
+      underpriced: 'Preniska cijena',
+      overpriced: 'Previsoka cijena',
+      price_anomaly: 'Anomalija cijene',
+      suspicious_profile: 'Sumnjiv profil',
+      unverified_seller: 'Neprovjereni prodavač',
+      condition_price_mismatch: 'Neslaganje stanja i cijene',
+      too_good_to_be_true: 'Prelijepo da bude istina',
+      suspicious_description: 'Sumnjiv opis',
+      price_deviation: 'Odstupanje cijene',
+      condition_to_price: 'Omjer stanja i cijene',
+      warranty_weight: 'Sumnjiva garancija',
+      seller_reliability: 'Nepouzdan prodavač',
+      negative_feedback_ratio: 'Negativni dojmovi',
+      spam_score: 'Potencijalni spam',
+      listing_staleness: 'Zastario oglas',
+      price_volatility: 'Nestabilna cijena',
+      anomaly: 'Anomalija',
+    };
+    const cleaned = type.replace(/^anomaly_/, '');
+    return anomalyTranslations[cleaned] ?? cleaned.replace(/_/g, ' ');
   }
 
 }

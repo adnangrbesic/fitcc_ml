@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject } from '@angular/core';
+import { Component, OnInit, signal, inject, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
@@ -65,6 +65,24 @@ export class App implements OnInit {
   customListingWeight = 40;
   customSellerWeight = 30;
   customPriceWeight = 30;
+
+  animatedScore = signal<number>(0);
+  animatedRingOffset = signal<number>(251.33); // 2 * Math.PI * 40
+  showCopiedToast = signal(false);
+  private animationFrameId: number | null = null;
+
+  constructor() {
+    effect(() => {
+      const res = this.result();
+      const score = this.getDisplayScore(res);
+      if (score !== null && score !== undefined) {
+        this.animateScore(score);
+      } else {
+        this.animatedScore.set(0);
+        this.animatedRingOffset.set(251.33);
+      }
+    });
+  }
 
   async ngOnInit(): Promise<void> {
     this.settingsApiUrl.set(await this.service.getConfig());
@@ -250,11 +268,11 @@ export class App implements OnInit {
   }
 
   formatAge(months?: number): string {
-    if (!months) return '0m';
-    if (months < 12) return `${months}m`;
+    if (!months) return '0 mj.';
+    if (months < 12) return `${months} mj.`;
     const yrs = months / 12;
-    if (yrs % 1 === 0) return `${yrs} god`;
-    return `${yrs.toFixed(1)} god`;
+    if (yrs % 1 === 0) return `${yrs} god.`;
+    return `${yrs.toFixed(1)} god.`;
   }
 
   getPriceDiff(market: number, listing?: number): number | null {
@@ -332,5 +350,112 @@ export class App implements OnInit {
 
   toggleScoreBreakdown(): void {
     this.scoreBreakdownOpen.update((value) => !value);
+  }
+
+  private animateScore(targetScore: number): void {
+    if (this.animationFrameId !== null) {
+      cancelAnimationFrame(this.animationFrameId);
+    }
+    const duration = 800;
+    const startTime = performance.now();
+    const startScore = this.animatedScore();
+    const circumference = 2 * Math.PI * 40;
+
+    const animate = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const ease = 1 - Math.pow(1 - progress, 3);
+      const currentScore = startScore + (targetScore - startScore) * ease;
+      this.animatedScore.set(currentScore);
+      
+      const targetOffset = circumference - (currentScore / 10) * circumference;
+      this.animatedRingOffset.set(targetOffset);
+
+      if (progress < 1) {
+        this.animationFrameId = requestAnimationFrame(animate);
+      } else {
+        this.animatedScore.set(targetScore);
+        this.animatedRingOffset.set(circumference - (targetScore / 10) * circumference);
+        this.animationFrameId = null;
+      }
+    };
+    this.animationFrameId = requestAnimationFrame(animate);
+  }
+
+  getQuickSummary(res: AnalysisResult): { text: string; icon: string; type: 'positive' | 'warning' | 'danger' } {
+    const score = this.getDisplayScore(res) ?? 0;
+    const isNew = res.isNewSeller === true;
+    const isAnomaly = res.isAnomaly === true;
+
+    // Price comparison logic
+    let priceDiff: number | null = null;
+    if (res.marketPrice && res.listingPrice) {
+      priceDiff = Math.round(((res.listingPrice - res.marketPrice) / res.marketPrice) * 100);
+    }
+
+    if (score >= 7) {
+      if (priceDiff !== null && priceDiff < 0) {
+        return {
+          text: `Oglas izgleda pouzdano. Cijena je ${Math.abs(priceDiff)}% ispod tržišnog prosjeka.`,
+          icon: 'check_circle',
+          type: 'positive'
+        };
+      }
+      return {
+        text: 'Oglas izgleda pouzdano.',
+        icon: 'check_circle',
+        type: 'positive'
+      };
+    } else if (score >= 5) {
+      if (isNew) {
+        return {
+          text: 'Prodavač je nov na platformi. Preporučujemo dodatni oprez.',
+          icon: 'warning',
+          type: 'warning'
+        };
+      }
+      return {
+        text: 'Oglas je prosječan. Provjerite detalje prije kupovine.',
+        icon: 'info',
+        type: 'warning'
+      };
+    } else {
+      if (isAnomaly) {
+        return {
+          text: 'Upozorenje: Cijena je sumnjivo niska za ovaj model, a prodavač nema historiju.',
+          icon: 'error',
+          type: 'danger'
+        };
+      }
+      return {
+        text: 'Oprez: Ovaj oglas ima nizak indeks povjerenja.',
+        icon: 'error',
+        type: 'danger'
+      };
+    }
+  }
+
+  shareAnalysis(res: AnalysisResult): void {
+    const score = this.getDisplayScore(res);
+    const label = this.getOverallScoreLabel(res);
+    const price = res.listingPrice || 0;
+    const diff = res.marketPrice ? Math.round(((price - res.marketPrice) / res.marketPrice) * 100) : 0;
+    const sellerTrust = Math.round(res.sellerTrust * 100);
+    const itemId = this.itemId();
+
+    const text = `🛡️ BuyGuardian analiza: ${this.formatName(res.productName || 'Artikal')}
+Ocjena: ${score !== null ? score.toFixed(1) : '—'}/10 — ${label}
+Cijena: ${price} KM (${diff > 0 ? '+' : ''}${diff}% od prosjeka)
+Prodavač: ${sellerTrust}% pozitivni
+Link: https://olx.ba/artikal/${itemId}`;
+
+    navigator.clipboard.writeText(text).then(() => {
+      this.showCopiedToast.set(true);
+      setTimeout(() => {
+        this.showCopiedToast.set(false);
+      }, 2000);
+    }).catch(err => {
+      console.error('Failed to copy text: ', err);
+    });
   }
 }

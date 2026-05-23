@@ -124,8 +124,25 @@
             <div class="trust-grid">
               <div class="trust-score">
                 @if (getDisplayScore(res) !== null && getDisplayScore(res) !== undefined) {
-                  <span class="score-number">{{ getDisplayScore(res) | number:'1.1-1' }}</span>
-                  <span class="score-max">/10</span>
+                  <svg class="score-ring-svg" width="92" height="92" viewBox="0 0 92 92">
+                    <circle class="ring-bg" cx="46" cy="46" r="40" fill="transparent" stroke="rgba(255, 255, 255, 0.15)" stroke-width="6"></circle>
+                    <circle class="ring-fg" cx="46" cy="46" r="40" fill="transparent" 
+                            stroke="url(#ring-gradient)" stroke-width="6"
+                            stroke-linecap="round"
+                            [style.stroke-dasharray]="251.33"
+                            [style.stroke-dashoffset]="animatedRingOffset()"
+                            transform="rotate(-90 46 46)"></circle>
+                    <defs>
+                      <linearGradient id="ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9"></stop>
+                        <stop offset="100%" stop-color="#ffffff" stop-opacity="0.6"></stop>
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                  <div class="score-text-overlay">
+                    <span class="score-number">{{ animatedScore() | number:'1.1-1' }}</span>
+                    <span class="score-max">/10</span>
+                  </div>
                 } @else {
                   <mat-progress-spinner mode="indeterminate" diameter="32" color="accent" class="trust-spinner"></mat-progress-spinner>
                 }
@@ -148,15 +165,22 @@
             </div>
           </mat-card-content>
         </mat-card>
- 
+
+        <!-- QUICK SUMMARY BANNER -->
+        @if (getQuickSummary(res); as summary) {
+          <div class="quick-summary" [ngClass]="summary.type">
+            <mat-icon>{{ summary.icon }}</mat-icon>
+            <span class="summary-text">{{ summary.text }}</span>
+          </div>
+        }
 
         <!-- SCORE BREAKDOWN -->
         <section class="score-breakdown">
           <div class="score-header">
             <h3 class="section-title">
-              <mat-icon>analytics</mat-icon> Razrada ocjene
+              <mat-icon>analytics</mat-icon> Oblikovanje ocjene
             </h3>
-            <button class="score-toggle" (click)="toggleScoreBreakdown()" aria-label="Prikaži ili sakrij razradu ocjene">
+            <button class="score-toggle" (click)="toggleScoreBreakdown()" aria-label="Prikaži ili sakrij oblikovanje ocjene">
               <mat-icon>{{ scoreBreakdownOpen() ? 'expand_less' : 'expand_more' }}</mat-icon>
             </button>
           </div>
@@ -166,7 +190,7 @@
                 <span class="score-label">Oglas</span>
                 @if (res.trustScore !== null && res.trustScore !== undefined) {
                   <span class="score-value">{{ res.trustScore | number:'1.1-1' }}</span>
-                  <span class="score-sub">Ponder {{ customListingWeight }}% · Maks 10</span>
+                  <span class="score-sub">Udio ocjene: {{ customListingWeight }}%</span>
                 } @else {
                   <span class="score-value">—</span>
                 }
@@ -175,8 +199,7 @@
                 <span class="score-label">Prodavač</span>
                 @if (getSellerScore(res) !== null && getSellerScore(res) !== undefined) {
                   <span class="score-value">{{ getSellerScore(res) | number:'1.1-1' }}</span>
-                  <span class="score-sub">Ponder {{ customSellerWeight }}% · Maks 10</span>
-                  <span class="score-sub">Sirovo {{ res.sellerTrust * 100 | number:'1.0-0' }}%</span>
+                  <span class="score-sub">Udio ocjene: {{ customSellerWeight }}%</span>
                 } @else {
                   <span class="score-value">—</span>
                 }
@@ -185,11 +208,10 @@
                 <span class="score-label">Cijena</span>
                 @if (getPriceScore(res) !== null && getPriceScore(res) !== undefined) {
                   <span class="score-value">{{ getPriceScore(res) | number:'1.1-1' }}</span>
+                  <span class="score-sub">Udio ocjene: {{ customPriceWeight }}%</span>
                 } @else {
                   <span class="score-value">—</span>
                 }
-                <span class="score-sub">Ponder {{ customPriceWeight }}% · Maks 10</span>
-                <span class="score-sub">Signal: {{ getPriceSignalLabel(res) }}</span>
               </div>
             </div>
             <button mat-button class="edit-weights-btn" (click)="toggleSettings()">
@@ -255,7 +277,7 @@
           </h3>
           <div class="seller-grid">
             <div class="seller-item">
-              <span class="seller-label">Seller Trust</span>
+              <span class="seller-label">Povjerenje prodavača</span>
               <div class="seller-bar-wrap">
                 <mat-progress-bar mode="determinate"
                   [value]="res.sellerTrust * 100"
@@ -387,6 +409,17 @@
         }
 
       </div>
+
+        <!-- SHARE ANALYSIS -->
+        <button mat-stroked-button class="share-analysis-btn" (click)="shareAnalysis(res)">
+          <mat-icon>share</mat-icon> PODIJELI ANALIZU
+        </button>
+
+        @if (showCopiedToast()) {
+          <div class="toast-copied-notification">
+            <mat-icon>assignment_turned_in</mat-icon> Sažetak kopiran u međuspremnik!
+          </div>
+        }
       
       <!-- DISCLAIMER -->
       <div class="disclaimer-text">
