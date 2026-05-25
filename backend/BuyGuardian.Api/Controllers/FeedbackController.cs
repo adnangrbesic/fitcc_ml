@@ -11,16 +11,17 @@ namespace BuyGuardian.Api.Controllers;
 /// <summary>
 /// Feedback & voting controller.
 /// 
-/// #1  — Ground-truth labels for CatBoost retraining
+/// #1  — Ground-truth labels for CatBoost retraining (human-in-the-loop)
 /// #10 — Upvote/Downvote UI with anti-troll measures
 /// 
 /// Anti-troll strategy:
-///   1. One vote per fingerprint per analysis (DB unique constraint)
-///   2. Bayesian prior: α=10 correct, β=2 incorrect = 83% prior accuracy
-///   3. Consistency weighting: users who mostly agree with model get higher weight
-///   4. Time-gated: vote only allowed after analysis was viewed for 10+ seconds
+///   1. One vote per fingerprint per analysis (SHA-256 hashed, DB unique constraint)
+///   2. Bayesian prior: α=10 correct, β=2 incorrect → 83% prior accuracy
+///   3. Consistency weighting: users who mostly agree with model get higher vote weight
+///   4. Time-gated: vote allowed only after viewing analysis for ≥10 seconds
 ///   5. Global cooldown: max 1 vote per 3 seconds per fingerprint
-///   6. Suspicious pattern detection: many downvotes in short time → flagged
+///   6. Troll detection: ≥5 downvotes in 1h + >80% downvote ratio → weight=0.1
+///   7. Admin bootstrap mode: direct labeling bypasses anti-troll, weight=5.0
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]

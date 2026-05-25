@@ -1,3 +1,17 @@
+"""
+Trust score prediction pipeline.
+
+TrustScorePredictor: rule-based fallback predictor.
+  - Extracts features from listing metadata
+  - Evaluates business rules (for-parts, mismatch, suspicious price)
+  - Computes subscores and composite
+  - Returns ScoreResult with confidence and reasons
+
+compute_confidence: weighted by data source reliability.
+  - Scraped data (condition, warranty, specs): weight 0.85–0.90
+  - LLM-derived (overpay_ratio, writing_quality): weight 0.50–0.55
+  - Heuristic (title_score, canonical_confidence): weight 0.65–0.70
+"""
 from __future__ import annotations
 
 import logging
@@ -14,12 +28,17 @@ from ml_service_listing.features.extractor import FeatureSet, extract_features
 
 
 class TrustScorePredictor:
-    """Compute trust scores for listings using rules and a composite formula."""
+    """Compute trust scores for listings using rules and a composite formula.
+    
+    This is the rule-based fallback when CatBoost model is unavailable
+    or when prediction fails. It uses deterministic business rules.
+    """
 
     def __init__(self, logger: logging.Logger) -> None:
         self._logger = logger
 
     def predict_listing(self, listing: Listing) -> ScoreResult:
+        """Full prediction pipeline: features → rules → subscores → composite → trust score."""
         features = extract_features(listing)
         rule_outcome = evaluate_rules(listing, features)
         subscores = compute_subscores(listing, features)

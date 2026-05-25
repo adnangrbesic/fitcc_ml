@@ -5,9 +5,9 @@ using BuyGuardian.Api.Data;
 namespace BuyGuardian.Api.Services;
 
 /// <summary>
-/// Background service that periodically checks price alerts.
-/// When a listing's price drops below the target (or any drop for untargeted alerts),
-/// it marks the alert as triggered. The Chrome extension polls for triggered alerts.
+/// Background service that checks price alerts every 2 hours.
+/// When a listing's price drops below the subscribed target, 
+/// the alert is queued for the Chrome extension to poll via notifications API.
 /// </summary>
 public class PriceAlertChecker : BackgroundService
 {

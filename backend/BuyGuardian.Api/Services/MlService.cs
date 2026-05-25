@@ -8,11 +8,11 @@ using BuyGuardian.Api.Models.Requests;
 namespace BuyGuardian.Api.Services;
 
 /// <summary>
-/// HTTP client that communicates with the Python ML microservice
-/// for Isolation Forest anomaly detection.
+/// HTTP client for the two Python ML microservices:
+///   - ml-service (port 8000): Isolation Forest anomaly detection
+///   - ml-service-listing (port 8010): CatBoost trust score prediction
 /// 
-/// Designed for resilience: all calls have timeouts, and failures
-/// return null / are logged rather than crashing the API.
+/// All calls have timeouts and never throw — failures return null.
 /// </summary>
 public class MlService : IMlService
 {

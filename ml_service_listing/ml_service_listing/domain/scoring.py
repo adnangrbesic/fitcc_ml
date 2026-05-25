@@ -1,3 +1,15 @@
+"""
+Trust score computation — rule-based fallback and composite scoring.
+
+Five subscores are computed from listing features:
+  - seller_score: derived from overall_listing_trust in metadata (30%)
+  - consistency_score: checks manufacturer/spec/title consistency (25%)
+  - condition_score: physical condition of the item (20%)
+  - pricing_score: overpay_ratio vs market median (15%)
+  - writing_score: description quality and length (10%)
+
+All subscores are normalized to 0–100 and combined with weighted average.
+"""
 from __future__ import annotations
 
 from ml_service_listing.domain.models import Listing, Subscores
@@ -7,6 +19,7 @@ from ml_service_listing.features.extractor import FeatureSet
 
 
 def compute_subscores(listing: Listing, features: FeatureSet) -> Subscores:
+    """Compute the five subscores that form the composite trust score."""
     seller_score = _seller_score(listing)
     consistency_score = _consistency_score(features)
     condition_score = _condition_score(listing, features)
@@ -22,6 +35,7 @@ def compute_subscores(listing: Listing, features: FeatureSet) -> Subscores:
 
 
 def compute_composite_score(subscores: Subscores) -> float:
+    """Weighted average: seller 30%, consistency 25%, condition 20%, pricing 15%, writing 10%."""
     return (
         0.30 * subscores.seller_score
         + 0.25 * subscores.consistency_score

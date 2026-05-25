@@ -8,6 +8,19 @@ using System.Text.Json;
 
 namespace BuyGuardian.Api.Features;
 
+/// <summary>
+/// Core analysis pipeline for a single OLX listing.
+/// 
+/// Flow:
+///   1. Check cache → return immediately if fresh
+///   2. Guard: reject listings with insufficient data (no description, no price)
+///   3. Calculate dynamic seller trust score (age, feedback, deliveries, verification)
+///   4. Request trust score from CatBoost ML service (ml-service-listing)
+///   5. Request anomaly score from Isolation Forest service (ml-service)
+///   6. Locate cheapest trusted listing in the same product group
+///   7. Extract UI alerts and risks for the extension
+///   8. Cache result for 1 hour
+/// </summary>
 public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, ListingAnalysisResult>
 {
     private readonly BuyGuardianContext _context;
@@ -23,6 +36,10 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
         _httpClientFactory = httpClientFactory;
     }
 
+    /// <summary>
+    /// Main analysis pipeline entry point.
+    /// Called via MediatR when the extension requests /api/analyze/{itemId}.
+    /// </summary>
     public async Task<ListingAnalysisResult> Handle(AnalyzeListingQuery request, CancellationToken cancellationToken)
     {
         var cacheKey = $"analysis:{request.ItemId}";
@@ -37,6 +54,34 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
 
         if (listing == null)
             throw new KeyNotFoundException($"Listing {request.ItemId} not found");
+
+        // ── Edge Case Guard: Insufficient Data ─────────────────────────
+        var descLen = listing.Description?.Trim().Length ?? 0;
+        var hasNoData = descLen < 5 || listing.Price <= 0;
+        if (hasNoData)
+        {
+            var insufficientResult = new ListingAnalysisResult(
+                listing.ItemId,
+                listing.Title ?? "Nepoznat artikal",
+                0, 0,
+                "Nema dovoljno podataka za analizu ovog oglasa.",
+                false,
+                listing.Price > 0 ? listing.Price : 0,
+                listing.Price > 0 ? listing.Price : null,
+                Array.Empty<string>(),
+                0.5, false,
+                listing.Product?.CategoryName,
+                listing.Product?.CanonicalName,
+                null, null,
+                true, // HasInsufficientData
+                null, null, null,
+                null, null, null, null,
+                null, null, null, null,
+                Array.Empty<string>()
+            );
+            await _cache.SetAsync(cacheKey, insufficientResult, TimeSpan.FromMinutes(15));
+            return insufficientResult;
+        }
 
         // ── Dynamic Seller Trust Score ────────────────────────────────────
         double sellerTrust = 0.5;
@@ -185,6 +230,7 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
             listing.Product?.Attributes != null 
                 ? AttributeNormalizer.Normalize(listing.Product.Attributes) 
                 : new Dictionary<string, object>(),
+            false, // HasInsufficientData
             // Isolation Forest anomaly detection
             listing.AnomalyScore,
             listing.IsAnomaly,
@@ -270,8 +316,8 @@ public class AnalyzeListingHandler : IRequestHandler<AnalyzeListingQuery, Listin
     }
 
     /// <summary>
-    /// Dynamic multi-factor seller trust score (0.0–1.0) from Seller entity.
-    /// Mirrors the ListingConsumer formula but reads from the DB entity directly.
+    /// Dynamic multi-factor seller trust score (0.0–1.0).
+    /// Weights: account age (15%), feedback ratio (40%), deliveries (25%), verification (20%).
     /// </summary>
     private static double CalculateSellerTrust(Seller seller)
     {

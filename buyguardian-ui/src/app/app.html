@@ -115,6 +115,16 @@
 
       <!-- RESULTS -->
       @if (result(); as res) {
+
+        <!-- INSUFFICIENT DATA GUARD -->
+        @if (res.hasInsufficientData) {
+          <div class="insufficient-data-card">
+            <mat-icon class="insufficient-icon">error_outline</mat-icon>
+            <div class="insufficient-title">Nedovoljno podataka</div>
+            <div class="insufficient-desc">Ovaj oglas nema dovoljno informacija za analizu. Preskačemo ga.</div>
+          </div>
+        } @else {
+
         <div class="results">
 
         <!-- TRUST SCORE -->
@@ -492,6 +502,7 @@
       <div class="disclaimer-text">
         Buyguardian može praviti greške, uvijek savjetujemo na osobnu provjeru artikala. Vi ste sebi svoj najveći Guardian!
       </div>
+      }
       }
     }
   </div>

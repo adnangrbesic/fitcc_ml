@@ -34,6 +34,7 @@ export interface AnalysisResult {
   cheapestSellerName?: string;
   uiAlerts?: string[];
   isSuspicious?: boolean;
+  hasInsufficientData?: boolean;
 }
 
 export interface Recommendation {

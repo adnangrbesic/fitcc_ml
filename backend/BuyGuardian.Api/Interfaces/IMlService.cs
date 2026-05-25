@@ -3,7 +3,13 @@ using BuyGuardian.Api.Models;
 namespace BuyGuardian.Api.Interfaces;
 
 /// <summary>
-/// Client interface for the Python ML anomaly detection microservice.
+/// Interface for communicating with the Python ML microservices.
+/// 
+/// Two services:
+///   - ml-service: Isolation Forest anomaly detection (unsupervised)
+///   - ml-service-listing: CatBoost trust score prediction (supervised)
+/// 
+/// Both support retraining: full retrain and labeled bootstrap retrain.
 /// </summary>
 public interface IMlService
 {

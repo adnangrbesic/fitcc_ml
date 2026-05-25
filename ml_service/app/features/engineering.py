@@ -1,17 +1,22 @@
 # ---------------------------------------------------------------------------
 # BuyGuardian ML Service — Feature Engineering
 # ---------------------------------------------------------------------------
-"""Extract and normalize the 8-dimensional feature matrix for Isolation Forest.
+"""8-dimensional feature extraction for Isolation Forest anomaly detection.
 
-Features (per listing, within a product group):
-    1. Relative Price Deviation  — (price - median) / median
-    2. Condition-to-Price Ratio  — condition / normalized_price
-    3. Warranty Weight           — proportional scale min(m/6, 1.0) for warranty months
-    4. Seller Reliability Anchor — log1p(deliveries) * log1p(age_months)
-    5. Price Volatility          — std(price_history) / median
-    6. Listing Staleness         — days since first scraped
-    7. Negative Feedback Ratio   — negative / (positive + 1)
-    8. Description Spam Score    — caps_ratio*0.5 + min(excl/10,1)*0.5
+Each listing within a product group is described by:
+
+    Feature                   | Description
+    --------------------------|------------------------------------------------
+    price_deviation           | (price - median) / median
+    condition_to_price        | condition / normalized_price
+    warranty_weight           | proportional: min(warranty_months / 6, 1.0)
+    seller_reliability        | log1p(deliveries) * log1p(age_months)
+    price_volatility          | std(price_history) / median
+    listing_staleness         | days since first scraped
+    negative_feedback_ratio   | negative / (positive + 1)
+    spam_score                | caps_ratio*0.5 + min(excl/10, 1)*0.5
+
+All features are scaled with RobustScaler(10, 90) before IF training.
 """
 
 from __future__ import annotations

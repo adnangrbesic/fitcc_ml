@@ -1,12 +1,20 @@
 # ---------------------------------------------------------------------------
 # BuyGuardian ML Service — Isolation Forest Anomaly Detector
 # ---------------------------------------------------------------------------
-"""Core ML module: trains per-product Isolation Forest models, caches them in
-Redis, and provides scoring with graceful fallback to Z-score / LLM.
+"""Unsupervised anomaly detection for marketplace listings.
 
-Anomaly type derivation:
-    After predict(), the feature with the largest |z-score| from the group
-    determines the anomaly type label for UX purposes.
+Architecture:
+  - Per-product Isolation Forest models (one per product group)
+  - 8-dimensional feature vector: price deviation, condition/price ratio,
+    warranty weight, seller reliability, price volatility, staleness,
+    negative feedback ratio, description spam score.
+  - Models cached in Redis (24h TTL), retrained every 6h via scheduler.
+  - Graceful fallback chain:
+      N >= 5  → Isolation Forest (8 features)
+      3 <= N < 5 → Z-score (price only)
+      N < 3   → LLM overpay_ratio passthrough
+  - Sanity guard: price deviation < 15% → not an anomaly
+  - Warranty guard: 3+ months warranty → only flag if >30% price deviation
 """
 
 from __future__ import annotations
