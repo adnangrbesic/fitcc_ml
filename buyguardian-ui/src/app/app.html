@@ -178,10 +178,41 @@
 
         <!-- QUICK SUMMARY BANNER -->
         @if (getQuickSummary(res); as summary) {
-          <div class="quick-summary" [ngClass]="summary.type">
+          <div class="quick-summary" [ngClass]="summary.type" (click)="toggleAiInspector()">
             <mat-icon>{{ summary.icon }}</mat-icon>
             <span class="summary-text">{{ summary.text }}</span>
+            <mat-icon class="summary-chevron">{{ aiInspectorOpen() ? 'expand_less' : 'expand_more' }}</mat-icon>
           </div>
+        }
+
+        <!-- AI INSPECTOR -->
+        @if (aiInspectorOpen()) {
+          <section class="ai-inspector">
+            <h3 class="section-title">
+              <mat-icon>psychology</mat-icon> Zašto ova ocjena?
+            </h3>
+            <div class="inspector-list">
+              @for (factor of getExplainabilityFactors(res); track factor.label) {
+                <div class="inspector-row">
+                  <div class="inspector-label">
+                    <span class="inspector-dot" [class.negative]="factor.negative" [class.positive]="!factor.negative"></span>
+                    <span class="inspector-name">{{ factor.label }}</span>
+                  </div>
+                  <div class="inspector-bar-wrap">
+                    <div class="inspector-bar" [class.negative]="factor.negative" [class.positive]="!factor.negative"
+                         [style.width.%]="clampImpact(factor.impact)">
+                    </div>
+                  </div>
+                  <span class="inspector-pct">{{ factor.negative ? '+' : '−' }}{{ factor.impact }}%</span>
+                  <span class="inspector-detail">{{ factor.detail }}</span>
+                </div>
+              }
+            </div>
+            <div class="inspector-legend">
+              <span><span class="legend-dot negative"></span> Povećava sumnju</span>
+              <span><span class="legend-dot positive"></span> Smanjuje sumnju</span>
+            </div>
+          </section>
         }
 
         <!-- SCORE BREAKDOWN -->

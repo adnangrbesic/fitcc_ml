@@ -75,6 +75,7 @@ export class App implements OnInit, AfterViewInit {
   compareModeActive = signal(false);      // Selection mode: checkboxes visible
   comparedRecs = signal<Set<string>>(new Set());
   showFullComparison = signal(false);     // Fullscreen comparison overlay
+  aiInspectorOpen = signal(false);        // AI explainability panel
 
   readonly listingWeight = 0.7;
   readonly sellerWeight = 0.3;
@@ -810,4 +811,135 @@ Link: https://olx.ba/artikal/${itemId}`;
     };
     return units[key] || '';
   }
+
+  // ── AI Inspector (SHAP-light explainability) ────────────────────────
+
+  toggleAiInspector(): void {
+    this.aiInspectorOpen.update(v => !v);
+  }
+
+  /// Template helper: Math.min for bar widths
+  clampImpact(impact: number): number {
+    return Math.min(impact, 100);
+  }
+
+  getExplainabilityFactors(res: AnalysisResult): ExplainabilityFactor[] {
+    const factors: ExplainabilityFactor[] = [];
+    const score = this.getDisplayScore(res) ?? 5;
+
+    // Price deviation
+    if (res.marketPrice && res.listingPrice && res.marketPrice > 0) {
+      const diff = Math.abs((res.listingPrice - res.marketPrice) / res.marketPrice);
+      if (diff > 0.05) {
+        factors.push({
+          label: res.listingPrice > res.marketPrice ? 'Cijena iznad tržišne' : 'Cijena ispod tržišne',
+          impact: Math.min(Math.round(diff * 100), 70),
+          negative: true,
+          detail: `${Math.round(diff * 100)}% ${res.listingPrice > res.marketPrice ? 'skuplje' : 'jeftinije'} od prosjeka`
+        });
+      }
+    }
+
+    if (res.trustScore < 6) {
+      factors.push({
+        label: 'Nizak indeks povjerenja oglasa',
+        impact: Math.round((6 - res.trustScore) * 12),
+        negative: true,
+        detail: `Ocjena oglasa: ${res.trustScore.toFixed(1)}/10`
+      });
+    }
+
+    if (res.sellerTrust < 0.6) {
+      factors.push({
+        label: 'Nepouzdan prodavač',
+        impact: Math.round((0.6 - res.sellerTrust) * 80),
+        negative: true,
+        detail: `Povjerenje: ${Math.round(res.sellerTrust * 100)}%`
+      });
+    }
+
+    if (res.isNewSeller) {
+      factors.push({
+        label: 'Novi profil prodavača',
+        impact: 25,
+        negative: true,
+        detail: `Starost: ${res.accountAgeMonths || 0} mj.`
+      });
+    }
+
+    if (res.isAnomaly && res.anomalyType) {
+      const typeLabel: Record<string, string> = {
+        'underpriced': 'Sumnjivo niska cijena',
+        'overpriced': 'Sumnjivo visoka cijena',
+        'too_good_to_be_true': 'Previše dobro da bi bilo istinito',
+        'suspicious_profile': 'Sumnjiv profil prodavača',
+        'suspicious_description': 'Sumnjiv opis oglasa',
+      };
+      factors.push({
+        label: typeLabel[res.anomalyType] || `Anomalija: ${res.anomalyType}`,
+        impact: 35,
+        negative: true,
+        detail: 'Detektovano mašinskim učenjem'
+      });
+    }
+
+    if (res.risks?.includes('empty_description')) {
+      factors.push({
+        label: 'Nedostaje opis artikla',
+        impact: 20,
+        negative: true,
+        detail: 'Opis prazan ili prekratak'
+      });
+    }
+
+    // Positive factors
+    if (res.warrantyMonths && res.warrantyMonths > 0) {
+      factors.push({
+        label: 'Garancija prisutna',
+        impact: 15 + Math.min(res.warrantyMonths, 24),
+        negative: false,
+        detail: `${res.warrantyMonths} mjeseci garancije`
+      });
+    }
+
+    if (res.sellerTrust >= 0.7) {
+      factors.push({
+        label: 'Pouzdan prodavač',
+        impact: Math.round(res.sellerTrust * 30),
+        negative: false,
+        detail: `${Math.round(res.sellerTrust * 100)}% pozitivnih`
+      });
+    }
+
+    if (score >= 7) {
+      factors.push({
+        label: 'Visoka ukupna ocjena',
+        impact: Math.round((score - 5) * 10),
+        negative: false,
+        detail: `${score.toFixed(1)}/10`
+      });
+    }
+
+    if (res.successfulDeliveries && res.successfulDeliveries > 5) {
+      factors.push({
+        label: 'Historija uspješne dostave',
+        impact: 10,
+        negative: false,
+        detail: `${res.successfulDeliveries} uspješnih dostava`
+      });
+    }
+
+    factors.sort((a, b) => {
+      if (a.negative !== b.negative) return a.negative ? -1 : 1;
+      return b.impact - a.impact;
+    });
+    return factors;
+  }
+}
+
+interface ExplainabilityFactor {
+  label: string;
+  impact: number;
+  negative: boolean;
+  detail: string;
 }
